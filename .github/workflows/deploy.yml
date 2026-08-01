@@ -26,13 +26,12 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'us-east-1' }}
-          CUSTOM_AMI_ID: 'ami-0866a3c8686eaeebb'
         run: |
           python -c "
           import boto3, os, time
           region = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
-          ami_id = os.getenv('CUSTOM_AMI_ID')
           ec2 = boto3.client('ec2', region_name=region)
+          ssm = boto3.client('ssm', region_name=region)
           tag_name = 'deployflow-github-push'
           
           print('Cleaning up old instances...')
@@ -45,19 +44,25 @@ jobs:
           instance_ids_to_terminate = [inst['InstanceId'] for res in response['Reservations'] for inst in res['Instances']]
           if instance_ids_to_terminate:
               ec2.terminate_instances(InstanceIds=instance_ids_to_terminate)
+              print('Waiting for old instances to terminate...')
               time.sleep(15)
+
+          print('Fetching official Ubuntu 24.04 AMI from AWS SSM...')
+          param_name = '/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id'
+          ami_id = ssm.get_parameter(Name=param_name)['Parameter']['Value']
+          print(f'Resolved AMI ID: {ami_id}')
 
           user_data_script = '''#!/bin/bash
           export DEBIAN_FRONTEND=noninteractive
           apt-get update -y
           apt-get install -y python3-pip
           pip3 install fastapi uvicorn
-          echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\")\ndef read_root(): return {\"status\": \"DeployFlow is live on standard Ubuntu!\"}' > /home/ubuntu/app.py
+          echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\")\ndef read_root(): return {\"status\": \"DeployFlow is live with automatic SSM AMI!\"}' > /home/ubuntu/app.py
           cd /home/ubuntu
           nohup uvicorn app:app --host 0.0.0.0 --port 80 &
           '''
 
-          print(f'Launching standard x86_64 EC2 instance (t3.micro) with AMI: {ami_id}...')
+          print(f'Launching standard x86_64 EC2 instance (t3.micro)...')
           res = ec2.run_instances(
               ImageId=ami_id,
               InstanceType='t3.micro',
