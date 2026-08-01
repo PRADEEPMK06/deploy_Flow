@@ -1,4 +1,4 @@
-name: DeployFlow CI/CD to AWS EC2
+name: DeployFlow CI/CD to EC2
 
 on:
   push:
@@ -7,93 +7,96 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up SSH Key
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          python-version: '3.11'
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install boto3
-
-      - name: Deploy and Refresh EC2 Instance
+      - name: Deploy to EC2 via SSH
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'us-east-1' }}
-          CUSTOM_AMI_ID: 'ami-02b64aa047cb5edf5'
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          python -c "
-          import boto3, os, time
-          region = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
-          ami_id = os.getenv('CUSTOM_AMI_ID')
-          ec2 = boto3.client('ec2', region_name=region)
-          tag_name = 'deployflow-github-push'
-          
-          print('Cleaning up old instances...')
-          response = ec2.describe_instances(
-              Filters=[
-                  {'Name': 'tag:Name', 'Values': [tag_name]},
-                  {'Name': 'instance-state-name', 'Values': ['pending', 'running', 'stopped']}
-              ]
-          )
-          instance_ids_to_terminate = [inst['InstanceId'] for res in response['Reservations'] for inst in res['Instances']]
-          if instance_ids_to_terminate:
-              ec2.terminate_instances(InstanceIds=instance_ids_to_terminate)
-              print('Waiting for old instances to terminate...')
-              time.sleep(15)
+          echo "Step 1: Connecting to EC2 server and checking previous deployment..."
+          ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
+            
+            # Check if project directory exists, create if missing
+            if [ ! -d "~/DeployFlow" ]; then
+              echo "Project directory not found. Creating ~/DeployFlow..."
+              mkdir -p ~/DeployFlow
+            fi
 
-          # Properly formatted multiline app.py creation script
-          user_data_script = '''#!/bin/bash
-          dnf update -y
-          dnf install -y python3-pip
-          pip3 install fastapi uvicorn
-          
-          cat << 'EOF' > /home/ec2-user/app.py
-          from fastapi import FastAPI
-          
-          app = FastAPI()
-          
-          @app.get('/')
-          def read_root():
-              return {'status': 'DeployFlow is live on Amazon Linux!'}
+            cd ~/DeployFlow
+
+            echo "Step 2: Checking prerequisites (Docker & Docker Compose)..."
+            if ! command -v docker &> /dev/null; then
+              echo "Docker not found. Installing Docker..."
+              sudo apt-get update
+              sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+              curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+              sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+              sudo apt-get update
+              sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+              sudo usermod -aG docker $USER
+            else
+              echo "Docker is already installed."
+            fi
+
+            if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+              echo "Docker Compose not found. Installing Docker Compose..."
+              sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            else
+              echo "Docker Compose is already installed."
+            fi
+
+            echo "Step 3: Cleaning up old containers/images..."
+            if [ -f "docker-compose.yml" ]; then
+              sudo docker-compose down --rmi local || true
+            fi
+
           EOF
-          
-          cd /home/ec2-user
-          nohup uvicorn app:app --host 0.0.0.0 --port 80 &
-          '''
 
-          print(f'Launching Amazon Linux EC2 instance (t3.micro) with AMI: {ami_id}...')
-          res = ec2.run_instances(
-              ImageId=ami_id,
-              InstanceType='t3.micro',
-              MinCount=1,
-              MaxCount=1,
-              UserData=user_data_script,
-              TagSpecifications=[{'ResourceType': 'instance', 'Tags': [{'Key': 'Name', 'Value': tag_name}]}]
-          )
-          instance_id = res['Instances'][0]['InstanceId']
-          print(f'Instance ID: {instance_id}. Waiting for public IP...')
-          
-          public_ip = ''
-          for _ in range(30):
-              time.sleep(5)
-              desc = ec2.describe_instances(InstanceIds=[instance_id])
-              inst = desc['Reservations'][0]['Instances'][0]
-              if inst['State']['Name'] == 'running':
-                  public_ip = inst.get('PublicIpAddress', '')
-                  if public_ip:
-                      break
-          
-          print('----------------------------------------')
-          if public_ip:
-              print(f'LIVE DEPLOYMENT URL: http://{public_ip}')
-          else:
-              print('Instance is running, but public IP allocation took a moment.')
-          print('----------------------------------------')
-          "
+      - name: Copy Project Files to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "."
+          target: "~/DeployFlow"
+
+      - name: Build, Make Live, and Verify EC2 Condition
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
+            cd ~/DeployFlow
+
+            echo "Step 4: Building and launching the application..."
+            sudo docker-compose up --build -d
+
+            echo "Step 5: Verifying container running conditions..."
+            sleep 5
+            sudo docker ps
+
+            # Health check on localhost inside EC2
+            if curl -s http://localhost:8000 > /dev/null || curl -s http://localhost:80 > /dev/null; then
+              echo "Application is up and responding locally!"
+            else
+              echo "Warning: Local health check didn't return immediately, check docker logs."
+              sudo docker-compose logs --tail=50
+            fi
+
+            echo "=========================================="
+            echo "DEPLOYMENT COMPLETE & EC2 IS LIVE!"
+            echo "Access your DeployFlow application at:"
+            echo "http://$EC2_HOST"
+            echo "=========================================="
+          EOF
