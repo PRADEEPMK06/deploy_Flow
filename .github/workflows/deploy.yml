@@ -25,15 +25,23 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          AWS_AMI_ID: ${{ secrets.AWS_AMI_ID || 'ami-022e1a32d3f7426f1' }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'us-east-1' }}
         run: |
           python -c "
           import boto3, os, time
-          ec2 = boto3.client('ec2', region_name=os.getenv('AWS_DEFAULT_REGION', 'us-east-1'))
+          region = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
+          ec2 = boto3.client('ec2', region_name=region)
+          ssm = boto3.client('ssm', region_name=region)
+          
+          print('Fetching latest Amazon Linux 2023 AMI ID dynamically...')
+          # Dynamically fetch the official AMI ID for this specific region
+          ami_param = ssm.get_parameter(Name='/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64')
+          ami_id = ami_param['Parameter']['Value']
+          print(f'Using AMI ID: {ami_id}')
+          
           print('Launching EC2 instance...')
           res = ec2.run_instances(
-              ImageId=os.getenv('AWS_AMI_ID'),
+              ImageId=ami_id,
               InstanceType='t2.micro',
               MinCount=1,
               MaxCount=1,
@@ -42,7 +50,6 @@ jobs:
           instance_id = res['Instances'][0]['InstanceId']
           print(f'Instance ID: {instance_id}. Waiting for public IP...')
           
-          # Wait for running state and public IP
           public_ip = ''
           for _ in range(30):
               time.sleep(5)
@@ -57,6 +64,6 @@ jobs:
           if public_ip:
               print(f'LIVE DEPLOYMENT URL: http://{public_ip}')
           else:
-              print('Instance is running, but public IP allocation took too long. Check AWS Console.')
+              print('Instance is running, but public IP allocation took a moment. Check your AWS EC2 Console.')
           print('----------------------------------------')
           "
