@@ -26,7 +26,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'us-east-1' }}
-          CUSTOM_AMI_ID: 'ami-0017868312904e37a'
+          CUSTOM_AMI_ID: 'ami-0866a3c8686eaeebb'
         run: |
           python -c "
           import boto3, os, time
@@ -47,21 +47,20 @@ jobs:
               ec2.terminate_instances(InstanceIds=instance_ids_to_terminate)
               time.sleep(15)
 
-          # Script for NGINX Plus Ubuntu image (runs FastAPI on port 8000)
           user_data_script = '''#!/bin/bash
           export DEBIAN_FRONTEND=noninteractive
           apt-get update -y
           apt-get install -y python3-pip
           pip3 install fastapi uvicorn
-          echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\")\ndef read_root(): return {\"status\": \"DeployFlow is live with NGINX Plus AMI!\"}' > /home/ubuntu/app.py
+          echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\")\ndef read_root(): return {\"status\": \"DeployFlow is live on standard Ubuntu!\"}' > /home/ubuntu/app.py
           cd /home/ubuntu
-          nohup uvicorn app:app --host 0.0.0.0 --port 8000 &
+          nohup uvicorn app:app --host 0.0.0.0 --port 80 &
           '''
 
-          print(f'Launching x86_64 EC2 instance (t3.micro) with NGINX Plus AMI: {ami_id}...')
+          print(f'Launching standard x86_64 EC2 instance (t3.micro) with AMI: {ami_id}...')
           res = ec2.run_instances(
               ImageId=ami_id,
-              InstanceType='t3.micro',  # Standard x86_64 instance type
+              InstanceType='t3.micro',
               MinCount=1,
               MaxCount=1,
               UserData=user_data_script,
@@ -82,8 +81,7 @@ jobs:
           
           print('----------------------------------------')
           if public_ip:
-              # Note the port 8000 since NGINX holds port 80
-              print(f'LIVE DEPLOYMENT URL: http://{public_ip}:8000')
+              print(f'LIVE DEPLOYMENT URL: http://{public_ip}')
           else:
               print('Instance is running, but public IP allocation took a moment.')
           print('----------------------------------------')
