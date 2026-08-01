@@ -26,10 +26,12 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'us-east-1' }}
+          CUSTOM_AMI_ID: 'ami-0017868312904e37a'
         run: |
           python -c "
           import boto3, os, time
           region = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
+          ami_id = os.getenv('CUSTOM_AMI_ID')
           ec2 = boto3.client('ec2', region_name=region)
           tag_name = 'deployflow-github-push'
           
@@ -45,30 +47,21 @@ jobs:
               ec2.terminate_instances(InstanceIds=instance_ids_to_terminate)
               time.sleep(15)
 
-          print('Finding latest Amazon Linux 2023 AMI...')
-          img_res = ec2.describe_images(
-              Owners=['amazon'],
-              Filters=[
-                  {'Name': 'name', 'Values': ['al2023-ami-*-x86_64']},
-                  {'Name': 'state', 'Values': ['available']}
-              ]
-          )
-          ami_id = sorted(img_res['Images'], key=lambda x: x['CreationDate'], reverse=True)[0]['ImageId']
-          
-          # Reliable User Data script for Amazon Linux 2023
+          # Script for NGINX Plus Ubuntu image (runs FastAPI on port 8000)
           user_data_script = '''#!/bin/bash
-          dnf update -y
-          dnf install -y python3-pip
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -y
+          apt-get install -y python3-pip
           pip3 install fastapi uvicorn
-          echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\")\ndef read_root(): return {\"status\": \"DeployFlow is live on AWS EC2!\"}' > /home/ec2-user/app.py
-          cd /home/ec2-user
-          nohup uvicorn app:app --host 0.0.0.0 --port 80 &
+          echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\")\ndef read_root(): return {\"status\": \"DeployFlow is live with NGINX Plus AMI!\"}' > /home/ubuntu/app.py
+          cd /home/ubuntu
+          nohup uvicorn app:app --host 0.0.0.0 --port 8000 &
           '''
 
-          print('Launching fresh EC2 instance with functional web server...')
+          print(f'Launching x86_64 EC2 instance (t3.micro) with NGINX Plus AMI: {ami_id}...')
           res = ec2.run_instances(
               ImageId=ami_id,
-              InstanceType='t2.micro',
+              InstanceType='t3.micro',  # Standard x86_64 instance type
               MinCount=1,
               MaxCount=1,
               UserData=user_data_script,
@@ -89,7 +82,8 @@ jobs:
           
           print('----------------------------------------')
           if public_ip:
-              print(f'LIVE DEPLOYMENT URL: http://{public_ip}')
+              # Note the port 8000 since NGINX holds port 80
+              print(f'LIVE DEPLOYMENT URL: http://{public_ip}:8000')
           else:
               print('Instance is running, but public IP allocation took a moment.')
           print('----------------------------------------')
