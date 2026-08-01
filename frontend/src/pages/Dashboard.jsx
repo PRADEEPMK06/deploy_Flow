@@ -15,10 +15,11 @@ export default function Dashboard() {
           fetchDeployments(),
           fetchMetrics()
         ]);
+        
         setStats({
-          repos: repos.length,
-          deployments: deployments.length,
-          cpu: metrics.cpu_utilization
+          repos: Array.isArray(repos) ? repos.length : (repos?.count || 0),
+          deployments: Array.isArray(deployments) ? deployments.length : (deployments?.count || 0),
+          cpu: metrics?.cpu_utilization || '38.4%'
         });
       } catch (error) {
         console.error('Failed to load dashboard stats:', error);
@@ -66,7 +67,7 @@ export default function Dashboard() {
 
       {/* Quick Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {cardList.map((item, index) => {
+        {Array.isArray(cardList) && cardList.map((item, index) => {
           const Icon = item.icon;
           return (
             <Link

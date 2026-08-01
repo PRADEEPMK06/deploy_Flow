@@ -56,20 +56,20 @@ export default function Logs() {
         </div>
 
         <div className="p-4 space-y-2 max-h-[500px] overflow-y-auto">
-          {logs.length === 0 ? (
+          {!Array.isArray(logs) || logs.length === 0 ? (
             <div className="text-slate-600 italic py-8 text-center">No logs to display...</div>
           ) : (
             logs.map((log, index) => (
               <div key={index} className="flex items-start space-x-3 leading-relaxed">
-                <span className="text-slate-500 select-none">[{log.timestamp}]</span>
+                <span className="text-slate-500 select-none">[{log?.timestamp || '00:00:00'}]</span>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                  log.level === 'SUCCESS' ? 'bg-emerald-500/20 text-emerald-400' :
-                  log.level === 'WARN' ? 'bg-amber-500/20 text-amber-400' :
+                  log?.level === 'SUCCESS' ? 'bg-emerald-500/20 text-emerald-400' :
+                  log?.level === 'WARN' ? 'bg-amber-500/20 text-amber-400' :
                   'bg-sky-500/20 text-sky-400'
                 }`}>
-                  {log.level}
+                  {log?.level || 'INFO'}
                 </span>
-                <span className="text-slate-300">{log.message}</span>
+                <span className="text-slate-300">{log?.message || JSON.stringify(log)}</span>
               </div>
             ))
           )}

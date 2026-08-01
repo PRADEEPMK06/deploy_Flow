@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GitBranch, Plus, ExternalLink, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { GitBranch, Plus, ExternalLink, CheckCircle2, Clock } from 'lucide-react';
 
 export default function Repositories() {
   const [repos, setRepos] = useState([
@@ -16,8 +16,9 @@ export default function Repositories() {
     e.preventDefault();
     if (!newRepoName) return;
 
+    const currentRepos = Array.isArray(repos) ? repos : [];
     const newRepo = {
-      id: repos.length + 1,
+      id: currentRepos.length + 1,
       name: newRepoName,
       branch: newRepoBranch,
       status: 'Active',
@@ -25,7 +26,7 @@ export default function Repositories() {
       url: `https://github.com/pradeepmk/${newRepoName}`
     };
 
-    setRepos([newRepo, ...repos]);
+    setRepos([newRepo, ...currentRepos]);
     setNewRepoName('');
     setNewRepoBranch('main');
     setShowAddModal(false);
@@ -61,41 +62,47 @@ export default function Repositories() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800 text-sm">
-              {repos.map((repo) => (
-                <tr key={repo.id} className="hover:bg-slate-800/40 transition-colors">
-                  <td className="py-4 px-6 font-medium text-white flex items-center space-x-3">
-                    <div className="p-2 bg-indigo-600/10 border border-indigo-500/20 rounded-lg text-indigo-400">
-                      <GitBranch className="h-4 w-4" />
-                    </div>
-                    <span>{repo.name}</span>
-                  </td>
-                  <td className="py-4 px-6 text-slate-300 font-mono text-xs">
-                    <span className="bg-slate-800 px-2 py-1 rounded border border-slate-700">{repo.branch}</span>
-                  </td>
-                  <td className="py-4 px-6">
-                    <span className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
-                      repo.status === 'Active' 
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                    }`}>
-                      {repo.status === 'Active' ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-                      <span>{repo.status}</span>
-                    </span>
-                  </td>
-                  <td className="py-4 px-6 text-slate-400 text-xs">{repo.lastDeploy}</td>
-                  <td className="py-4 px-6 text-right space-x-3">
-                    <a
-                      href={repo.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center text-slate-400 hover:text-white transition-colors"
-                      title="View on GitHub"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  </td>
+              {!Array.isArray(repos) || repos.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="py-8 text-center text-slate-500">No repositories connected yet.</td>
                 </tr>
-              ))}
+              ) : (
+                repos.map((repo, index) => (
+                  <tr key={repo?.id || index} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="py-4 px-6 font-medium text-white flex items-center space-x-3">
+                      <div className="p-2 bg-indigo-600/10 border border-indigo-500/20 rounded-lg text-indigo-400">
+                        <GitBranch className="h-4 w-4" />
+                      </div>
+                      <span>{repo?.name || 'Unnamed Repository'}</span>
+                    </td>
+                    <td className="py-4 px-6 text-slate-300 font-mono text-xs">
+                      <span className="bg-slate-800 px-2 py-1 rounded border border-slate-700">{repo?.branch || 'main'}</span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                        repo?.status === 'Active' 
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      }`}>
+                        {repo?.status === 'Active' ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                        <span>{repo?.status || 'Unknown'}</span>
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 text-slate-400 text-xs">{repo?.lastDeploy || 'Never'}</td>
+                    <td className="py-4 px-6 text-right space-x-3">
+                      <a
+                        href={repo?.url || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center text-slate-400 hover:text-white transition-colors"
+                        title="View on GitHub"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

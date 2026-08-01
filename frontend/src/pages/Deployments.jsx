@@ -13,9 +13,10 @@ export default function Deployments() {
   const loadDeployments = async () => {
     try {
       const data = await fetchDeployments();
-      setDeployments(data);
+      setDeployments(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch deployments:', error);
+      setDeployments([]);
     } finally {
       setLoading(false);
     }
@@ -24,7 +25,7 @@ export default function Deployments() {
   const handleTriggerBuild = async () => {
     try {
       const newDep = await triggerDeployment('deployflow-core');
-      setDeployments([newDep, ...deployments]);
+      setDeployments((prev) => [newDep, ...(Array.isArray(prev) ? prev : [])]);
     } catch (error) {
       console.error('Failed to trigger deployment:', error);
     }
@@ -65,44 +66,44 @@ export default function Deployments() {
                 <tr>
                   <td colSpan="6" className="py-8 text-center text-slate-500">Loading deployments from backend...</td>
                 </tr>
-              ) : deployments.length === 0 ? (
+              ) : !Array.isArray(deployments) || deployments.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="py-8 text-center text-slate-500">No deployments recorded yet.</td>
                 </tr>
               ) : (
-                deployments.map((dep) => (
-                  <tr key={dep.id} className="hover:bg-slate-800/40 transition-colors">
+                deployments.map((dep, index) => (
+                  <tr key={dep?.id || index} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-4 px-6 font-mono text-xs text-indigo-400 font-medium">
-                      {dep.id}
+                      {dep?.id || 'N/A'}
                     </td>
                     <td className="py-4 px-6 font-medium text-white flex items-center space-x-2">
                       <Rocket className="h-4 w-4 text-slate-400" />
-                      <span>{dep.repo}</span>
+                      <span>{dep?.repo || 'Unknown'}</span>
                     </td>
                     <td className="py-4 px-6 text-slate-300">
                       <span className="bg-slate-800 px-2.5 py-1 rounded-md text-xs font-medium border border-slate-700">
-                        {dep.env}
+                        {dep?.env || 'production'}
                       </span>
                     </td>
                     <td className="py-4 px-6 font-mono text-xs text-slate-400">
-                      {dep.commit}
+                      {dep?.commit || 'HEAD'}
                     </td>
                     <td className="py-4 px-6">
                       <span className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
-                        dep.status === 'Success' 
+                        dep?.status === 'Success' 
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                          : dep.status === 'Building'
+                          : dep?.status === 'Building'
                           ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse'
                           : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                       }`}>
-                        {dep.status === 'Success' && <CheckCircle2 className="h-3 w-3" />}
-                        {dep.status === 'Building' && <Clock className="h-3 w-3" />}
-                        {dep.status === 'Failed' && <AlertCircle className="h-3 w-3" />}
-                        <span>{dep.status}</span>
+                        {dep?.status === 'Success' && <CheckCircle2 className="h-3 w-3" />}
+                        {dep?.status === 'Building' && <Clock className="h-3 w-3" />}
+                        {dep?.status === 'Failed' && <AlertCircle className="h-3 w-3" />}
+                        <span>{dep?.status || 'Unknown'}</span>
                       </span>
                     </td>
                     <td className="py-4 px-6 text-right text-slate-400 text-xs">
-                      {dep.time}
+                      {dep?.time || 'Just now'}
                     </td>
                   </tr>
                 ))
