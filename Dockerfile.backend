@@ -1,4 +1,4 @@
-# Stage 1: Build the React Frontend
+# Stage 1: Build the React Frontend (DeployFlow Dashboard)
 FROM node:18-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
@@ -10,9 +10,11 @@ RUN npm run build
 FROM python:3.10-slim
 WORKDIR /app
 
-# Install system dependencies if needed
+# Install system dependencies: Git for cloning user repos, and Docker CLI to build user sites
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
+    curl \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -22,12 +24,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend code
 COPY backend/ .
 
-# Copy the built frontend files from Stage 1 into the backend static folder
-# (Adjust the path 'dist' or 'build' depending on what Vite/React outputs)
+# Copy the built frontend dashboard files into the static folder
 COPY --from=frontend-build /app/frontend/dist /app/static
 
-# Expose port
 EXPOSE 8000
 
-# Start the application
+# Run FastAPI
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
