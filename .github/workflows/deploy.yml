@@ -21,7 +21,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install boto3
 
-      - name: Provision EC2 Instance on Push
+      - name: Deploy and Refresh EC2 Instance
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -31,28 +31,45 @@ jobs:
           import boto3, os, time
           region = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
           ec2 = boto3.client('ec2', region_name=region)
+          tag_name = 'deployflow-github-push'
           
-          print('Finding latest Amazon Linux 2 AMI via EC2 filters...')
-          # Uses standard describe_images which is already allowed under AmazonEC2FullAccess
-          response = ec2.describe_images(
+          print('Checking for existing DeployFlow instances to clean up...')
+          response = ec2.describe_instances(
+              Filters=[
+                  {'Name': 'tag:Name', 'Values': [tag_name]},
+                  {'Name': 'instance-state-name', 'Values': ['pending', 'running', 'stopped']}
+              ]
+          )
+          
+          instance_ids_to_terminate = []
+          for reservation in response['Reservations']:
+              for inst in reservation['Instances']:
+                  instance_ids_to_terminate.append(inst['InstanceId'])
+          
+          if instance_ids_to_terminate:
+              print(f'Terminating old instance(s): {instance_ids_to_terminate}')
+              ec2.terminate_instances(InstanceIds=instance_ids_to_terminate)
+              print('Waiting for old instances to fully terminate...')
+              time.sleep(15)
+
+          print('Finding latest Amazon Linux 2 AMI...')
+          img_res = ec2.describe_images(
               Owners=['amazon'],
               Filters=[
                   {'Name': 'name', 'Values': ['amzn2-ami-hvm-*-x86_64-gp2']},
                   {'Name': 'state', 'Values': ['available']}
               ]
           )
-          # Sort by creation date to get the latest
-          images = sorted(response['Images'], key=lambda x: x['CreationDate'], reverse=True)
+          images = sorted(img_res['Images'], key=lambda x: x['CreationDate'], reverse=True)
           ami_id = images[0]['ImageId']
-          print(f'Using AMI ID: {ami_id}')
           
-          print('Launching EC2 instance...')
+          print('Launching fresh EC2 instance...')
           res = ec2.run_instances(
               ImageId=ami_id,
               InstanceType='t2.micro',
               MinCount=1,
               MaxCount=1,
-              TagSpecifications=[{'ResourceType': 'instance', 'Tags': [{'Key': 'Name', 'Value': 'deployflow-github-push'}]}]
+              TagSpecifications=[{'ResourceType': 'instance', 'Tags': [{'Key': 'Name', 'Value': tag_name}]}]
           )
           instance_id = res['Instances'][0]['InstanceId']
           print(f'Instance ID: {instance_id}. Waiting for public IP...')
@@ -71,6 +88,6 @@ jobs:
           if public_ip:
               print(f'LIVE DEPLOYMENT URL: http://{public_ip}')
           else:
-              print('Instance is running, but public IP allocation took a moment. Check your AWS EC2 Console.')
+              print('Instance is running, but public IP allocation took a moment. Check your AWS Console.')
           print('----------------------------------------')
           "
