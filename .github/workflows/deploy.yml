@@ -33,23 +33,16 @@ jobs:
           ec2 = boto3.client('ec2', region_name=region)
           tag_name = 'deployflow-github-push'
           
-          print('Checking for existing DeployFlow instances to clean up...')
+          print('Cleaning up old instances...')
           response = ec2.describe_instances(
               Filters=[
                   {'Name': 'tag:Name', 'Values': [tag_name]},
                   {'Name': 'instance-state-name', 'Values': ['pending', 'running', 'stopped']}
               ]
           )
-          
-          instance_ids_to_terminate = []
-          for reservation in response['Reservations']:
-              for inst in reservation['Instances']:
-                  instance_ids_to_terminate.append(inst['InstanceId'])
-          
+          instance_ids_to_terminate = [inst['InstanceId'] for res in response['Reservations'] for inst in res['Instances']]
           if instance_ids_to_terminate:
-              print(f'Terminating old instance(s): {instance_ids_to_terminate}')
               ec2.terminate_instances(InstanceIds=instance_ids_to_terminate)
-              print('Waiting for old instances to fully terminate...')
               time.sleep(15)
 
           print('Finding latest Amazon Linux 2 AMI...')
@@ -60,15 +53,24 @@ jobs:
                   {'Name': 'state', 'Values': ['available']}
               ]
           )
-          images = sorted(img_res['Images'], key=lambda x: x['CreationDate'], reverse=True)
-          ami_id = images[0]['ImageId']
+          ami_id = sorted(img_res['Images'], key=lambda x: x['CreationDate'], reverse=True)[0]['ImageId']
           
-          print('Launching fresh EC2 instance...')
+          # User data script that runs automatically on the EC2 server upon startup to start a test web server
+          user_data_script = '''#!/bin/bash
+          yum update -y
+          amazon-linux-extras install python3.8 -y
+          pip3 install fastapi uvicorn
+          echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\")\ndef read_root(): return {\"status\": \"DeployFlow is live on AWS EC2!\"}' > app.py
+          nohup uvicorn app:app --host 0.0.0.0 --port 80 &
+          '''
+
+          print('Launching fresh EC2 instance with startup web server...')
           res = ec2.run_instances(
               ImageId=ami_id,
               InstanceType='t2.micro',
               MinCount=1,
               MaxCount=1,
+              UserData=user_data_script,
               TagSpecifications=[{'ResourceType': 'instance', 'Tags': [{'Key': 'Name', 'Value': tag_name}]}]
           )
           instance_id = res['Instances'][0]['InstanceId']
@@ -88,6 +90,6 @@ jobs:
           if public_ip:
               print(f'LIVE DEPLOYMENT URL: http://{public_ip}')
           else:
-              print('Instance is running, but public IP allocation took a moment. Check your AWS Console.')
+              print('Instance is running, but public IP allocation took a moment.')
           print('----------------------------------------')
           "
