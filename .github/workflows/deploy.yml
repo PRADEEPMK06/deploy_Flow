@@ -19,15 +19,44 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
           pip install boto3
 
-      - name: Deploy / Trigger AWS EC2 Provisioning
+      - name: Provision EC2 Instance on Push
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          AWS_AMI_ID: ${{ secrets.AWS_AMI_ID || 'ami-022e1a32d3f7426f1' }}
         run: |
-          echo "Starting automated EC2 deployment workflow..."
-          # This runs your backend deployment script or triggers the cloud provisioning pipeline
-          python backend/main.py --ci-deploy
+          python -c "
+          import boto3, os, time
+          ec2 = boto3.client('ec2', region_name=os.getenv('AWS_DEFAULT_REGION', 'us-east-1'))
+          print('Launching EC2 instance...')
+          res = ec2.run_instances(
+              ImageId=os.getenv('AWS_AMI_ID'),
+              InstanceType='t2.micro',
+              MinCount=1,
+              MaxCount=1,
+              TagSpecifications=[{'ResourceType': 'instance', 'Tags': [{'Key': 'Name', 'Value': 'deployflow-github-push'}]}]
+          )
+          instance_id = res['Instances'][0]['InstanceId']
+          print(f'Instance ID: {instance_id}. Waiting for public IP...')
+          
+          # Wait for running state and public IP
+          public_ip = ''
+          for _ in range(30):
+              time.sleep(5)
+              desc = ec2.describe_instances(InstanceIds=[instance_id])
+              inst = desc['Reservations'][0]['Instances'][0]
+              if inst['State']['Name'] == 'running':
+                  public_ip = inst.get('PublicIpAddress', '')
+                  if public_ip:
+                      break
+          
+          print('----------------------------------------')
+          if public_ip:
+              print(f'LIVE DEPLOYMENT URL: http://{public_ip}')
+          else:
+              print('Instance is running, but public IP allocation took too long. Check AWS Console.')
+          print('----------------------------------------')
+          "
