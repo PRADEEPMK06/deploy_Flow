@@ -31,12 +31,19 @@ jobs:
           import boto3, os, time
           region = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
           ec2 = boto3.client('ec2', region_name=region)
-          ssm = boto3.client('ssm', region_name=region)
           
-          print('Fetching latest Amazon Linux 2023 AMI ID dynamically...')
-          # Dynamically fetch the official AMI ID for this specific region
-          ami_param = ssm.get_parameter(Name='/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64')
-          ami_id = ami_param['Parameter']['Value']
+          print('Finding latest Amazon Linux 2 AMI via EC2 filters...')
+          # Uses standard describe_images which is already allowed under AmazonEC2FullAccess
+          response = ec2.describe_images(
+              Owners=['amazon'],
+              Filters=[
+                  {'Name': 'name', 'Values': ['amzn2-ami-hvm-*-x86_64-gp2']},
+                  {'Name': 'state', 'Values': ['available']}
+              ]
+          )
+          # Sort by creation date to get the latest
+          images = sorted(response['Images'], key=lambda x: x['CreationDate'], reverse=True)
+          ami_id = images[0]['ImageId']
           print(f'Using AMI ID: {ami_id}')
           
           print('Launching EC2 instance...')
