@@ -1,103 +1,37 @@
-name: DeployFlow CI/CD Pipeline
+name: Deploy to EC2
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ main ]
 
 jobs:
-  # Job 1: Check server connectivity and install required prerequisites (Git, Docker, Docker Compose)
-  setup-environment:
+  deploy-master:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@master
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
-      - name: Install Prerequisites on EC2 (Amazon Linux)
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-        run: |
-          ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
-            echo "--- Step 1: Updating system packages & installing Git/Docker ---"
-            sudo yum update -y
-            sudo yum install -y git docker
-
-            echo "--- Step 2: Starting and enabling Docker service ---"
-            sudo systemctl start docker
-            sudo systemctl enable docker
-            sudo usermod -aG docker $USER
-
-            echo "--- Step 3: Installing Docker Compose ---"
-            if ! command -v docker-compose &> /dev/null; then
-              sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-              sudo chmod +x /usr/local/bin/docker-compose
-            else
-              echo "Docker Compose is already installed."
-            fi
-            echo "Environment setup completed successfully!"
-          EOF
-
-  # Job 2: Clone or pull the latest code repository onto the server
-  load-application:
-    needs: setup-environment
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
-      - name: Fetch Latest Code on EC2
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-        run: |
-          ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
-            echo "--- Step 4: Loading application repository ---"
-            if [ ! -d "~/DeployFlow" ]; then
-              echo "Cloning repository for the first time..."
-              git clone https://github.com/${{ github.repository }}.git ~/DeployFlow
-            else
-              echo "Repository exists. Pulling latest changes..."
-              cd ~/DeployFlow
-              git pull origin main || git pull origin master
-            fi
-            echo "Application code loaded successfully!"
-          EOF
-
-  # Job 3: Build, containerize, make live, and output access details
-  make-live:
-    needs: load-application
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
-      - name: Run Docker Compose and Verify Live Status
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-        run: |
-          ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
-            echo "--- Step 5: Building and running containers ---"
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
             cd ~/DeployFlow
 
-            # Bring down old containers if active
-            sudo docker-compose down || true
+            # 1. Pull the absolute latest code safely (overwrites any local drift)
+            git fetch origin main
+            git reset --hard origin/main
 
-            # Build and run containers in background
-            sudo docker-compose up --build -d
+            # 2. Stop the running container gracefully
+            sudo docker-compose down
 
-            echo "--- Step 6: Verifying running conditions ---"
-            sleep 5
-            sudo docker ps
+            # 3. Build using Docker cache (fast & space-efficient, only rebuilds what changed)
+            sudo docker-compose build
 
-            echo "=================================================="
-            echo " DEPLOYMENT COMPLETE! EC2 IS LIVE "
-            echo " Access your application at: http://$EC2_HOST"
-            echo "=================================================="
-          EOF
+            # 4. Start the new container
+            sudo docker-compose up -d
+
+            # 5. Clean up ONLY old, unused dangling Docker images to keep disk clean
+            sudo docker image prune -f
