@@ -1,102 +1,103 @@
-name: DeployFlow CI/CD to EC2
+name: DeployFlow CI/CD Pipeline
 
 on:
   push:
     branches: [ "main", "master" ]
 
 jobs:
-  deploy:
+  # Job 1: Check server connectivity and install required prerequisites (Git, Docker, Docker Compose)
+  setup-environment:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up SSH Key
+      - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
-      - name: Deploy to EC2 via SSH
+      - name: Install Prerequisites on EC2 (Amazon Linux)
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          echo "Step 1: Connecting to EC2 server and checking previous deployment..."
           ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
-            
-            # Check if project directory exists, create if missing
-            if [ ! -d "~/DeployFlow" ]; then
-              echo "Project directory not found. Creating ~/DeployFlow..."
-              mkdir -p ~/DeployFlow
-            fi
+            echo "--- Step 1: Updating system packages & installing Git/Docker ---"
+            sudo yum update -y
+            sudo yum install -y git docker
 
-            cd ~/DeployFlow
+            echo "--- Step 2: Starting and enabling Docker service ---"
+            sudo systemctl start docker
+            sudo systemctl enable docker
+            sudo usermod -aG docker $USER
 
-            echo "Step 2: Checking prerequisites (Docker & Docker Compose)..."
-            if ! command -v docker &> /dev/null; then
-              echo "Docker not found. Installing Docker..."
-              sudo apt-get update
-              sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-              curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-              sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-              sudo apt-get update
-              sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-              sudo usermod -aG docker $USER
-            else
-              echo "Docker is already installed."
-            fi
-
-            if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-              echo "Docker Compose not found. Installing Docker Compose..."
+            echo "--- Step 3: Installing Docker Compose ---"
+            if ! command -v docker-compose &> /dev/null; then
               sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
               sudo chmod +x /usr/local/bin/docker-compose
             else
               echo "Docker Compose is already installed."
             fi
-
-            echo "Step 3: Cleaning up old containers/images..."
-            if [ -f "docker-compose.yml" ]; then
-              sudo docker-compose down --rmi local || true
-            fi
-
+            echo "Environment setup completed successfully!"
           EOF
 
-      - name: Copy Project Files to EC2
-        uses: appleboy/scp-action@master
+  # Job 2: Clone or pull the latest code repository onto the server
+  load-application:
+    needs: setup-environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "."
-          target: "~/DeployFlow"
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
-      - name: Build, Make Live, and Verify EC2 Condition
+      - name: Fetch Latest Code on EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
           ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
+            echo "--- Step 4: Loading application repository ---"
+            if [ ! -d "~/DeployFlow" ]; then
+              echo "Cloning repository for the first time..."
+              git clone https://github.com/${{ github.repository }}.git ~/DeployFlow
+            else
+              echo "Repository exists. Pulling latest changes..."
+              cd ~/DeployFlow
+              git pull origin main || git pull origin master
+            fi
+            echo "Application code loaded successfully!"
+          EOF
+
+  # Job 3: Build, containerize, make live, and output access details
+  make-live:
+    needs: load-application
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Run Docker Compose and Verify Live Status
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
+            echo "--- Step 5: Building and running containers ---"
             cd ~/DeployFlow
 
-            echo "Step 4: Building and launching the application..."
+            # Bring down old containers if active
+            sudo docker-compose down || true
+
+            # Build and run containers in background
             sudo docker-compose up --build -d
 
-            echo "Step 5: Verifying container running conditions..."
+            echo "--- Step 6: Verifying running conditions ---"
             sleep 5
             sudo docker ps
 
-            # Health check on localhost inside EC2
-            if curl -s http://localhost:8000 > /dev/null || curl -s http://localhost:80 > /dev/null; then
-              echo "Application is up and responding locally!"
-            else
-              echo "Warning: Local health check didn't return immediately, check docker logs."
-              sudo docker-compose logs --tail=50
-            fi
-
-            echo "=========================================="
-            echo "DEPLOYMENT COMPLETE & EC2 IS LIVE!"
-            echo "Access your DeployFlow application at:"
-            echo "http://$EC2_HOST"
-            echo "=========================================="
+            echo "=================================================="
+            echo " DEPLOYMENT COMPLETE! EC2 IS LIVE "
+            echo " Access your application at: http://$EC2_HOST"
+            echo "=================================================="
           EOF
