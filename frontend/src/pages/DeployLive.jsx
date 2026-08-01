@@ -12,7 +12,12 @@ export default function DeployLive() {
   const fetchActiveDeployments = async () => {
     try {
       const res = await axios.get('/api/active-deployments');
-      setDeployments(res.data);
+      // Ensure we only set state if data is truly an array, otherwise default to []
+      if (Array.isArray(res.data)) {
+        setDeployments(res.data);
+      } else {
+        setDeployments([]);
+      }
     } catch (err) {
       console.error('Failed to fetch live deployments', err);
     }
@@ -37,7 +42,8 @@ export default function DeployLive() {
         branch: branch,
         port: 8080
       });
-      setDeployments([res.data, ...deployments]);
+      // Safely prepend new deployment while ensuring deployments is an array
+      setDeployments((prev) => [res.data, ...(Array.isArray(prev) ? prev : [])]);
       setRepoUrl('');
     } catch (err) {
       setError(err.response?.data?.detail || 'Deployment failed. Make sure Docker is running.');
@@ -106,7 +112,7 @@ export default function DeployLive() {
         <h2 className="text-lg font-semibold text-white tracking-tight">Active Live Deployments</h2>
         
         <div className="grid grid-cols-1 gap-4">
-          {deployments.length === 0 ? (
+          {!Array.isArray(deployments) || deployments.length === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-500 text-sm">
               No live container instances running yet. Launch one above!
             </div>
@@ -116,20 +122,20 @@ export default function DeployLive() {
                 <div className="space-y-1">
                   <div className="flex items-center space-x-3">
                     <span className="font-mono text-xs text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">
-                      {dep.id}
+                      {dep?.id || 'N/A'}
                     </span>
                     <span className="inline-flex items-center space-x-1 text-emerald-400 text-xs font-medium">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                      <span>{dep.status}</span>
+                      <span>{dep?.status || 'Running'}</span>
                     </span>
                   </div>
-                  <p className="text-sm font-medium text-white font-mono break-all">{dep.repo_url}</p>
-                  <p className="text-xs text-slate-500 font-mono">Container ID: {dep.container_id}</p>
+                  <p className="text-sm font-medium text-white font-mono break-all">{dep?.repo_url || 'Unknown Repository'}</p>
+                  <p className="text-xs text-slate-500 font-mono">Container ID: {dep?.container_id || 'N/A'}</p>
                 </div>
 
                 <div className="flex items-center space-x-3">
                   <a
-                    href={dep.public_url}
+                    href={dep?.public_url || '#'}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-lg shadow-emerald-600/20"
