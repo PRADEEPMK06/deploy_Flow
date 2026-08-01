@@ -1,16 +1,22 @@
-# Stage 1: Build the React Frontend (DeployFlow Dashboard)
+# Stage 1: Build the React Frontend
 FROM node:18-alpine AS frontend-build
 WORKDIR /app/frontend
+
 COPY frontend/package*.json ./
 RUN npm install
+
 COPY frontend/ ./
+
+# Fix executable permissions for Vite
+RUN chmod +x node_modules/.bin/vite
+
 RUN npm run build
 
 # Stage 2: Setup Python FastAPI Backend
 FROM python:3.10-slim
 WORKDIR /app
 
-# Install system dependencies: Git for cloning user repos, and Docker CLI to build user sites
+# Install system dependencies: Git, curl, and Docker CLI
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
@@ -18,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY backend/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code
