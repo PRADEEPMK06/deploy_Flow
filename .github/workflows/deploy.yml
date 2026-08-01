@@ -48,12 +48,22 @@ jobs:
               print('Waiting for old instances to terminate...')
               time.sleep(15)
 
-          # Startup script for Amazon Linux using yum
+          # Properly formatted multiline app.py creation script
           user_data_script = '''#!/bin/bash
           dnf update -y
           dnf install -y python3-pip
           pip3 install fastapi uvicorn
-          echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\")\ndef read_root(): return {\"status\": \"DeployFlow is live with your Amazon Linux AMI!\"}' > /home/ec2-user/app.py
+          
+          cat << 'EOF' > /home/ec2-user/app.py
+          from fastapi import FastAPI
+          
+          app = FastAPI()
+          
+          @app.get('/')
+          def read_root():
+              return {'status': 'DeployFlow is live on Amazon Linux!'}
+          EOF
+          
           cd /home/ec2-user
           nohup uvicorn app:app --host 0.0.0.0 --port 80 &
           '''
