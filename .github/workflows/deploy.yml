@@ -45,26 +45,27 @@ jobs:
               ec2.terminate_instances(InstanceIds=instance_ids_to_terminate)
               time.sleep(15)
 
-          print('Finding latest Amazon Linux 2 AMI...')
+          print('Finding latest Amazon Linux 2023 AMI...')
           img_res = ec2.describe_images(
               Owners=['amazon'],
               Filters=[
-                  {'Name': 'name', 'Values': ['amzn2-ami-hvm-*-x86_64-gp2']},
+                  {'Name': 'name', 'Values': ['al2023-ami-*-x86_64']},
                   {'Name': 'state', 'Values': ['available']}
               ]
           )
           ami_id = sorted(img_res['Images'], key=lambda x: x['CreationDate'], reverse=True)[0]['ImageId']
           
-          # User data script that runs automatically on the EC2 server upon startup to start a test web server
+          # Reliable User Data script for Amazon Linux 2023
           user_data_script = '''#!/bin/bash
-          yum update -y
-          amazon-linux-extras install python3.8 -y
+          dnf update -y
+          dnf install -y python3-pip
           pip3 install fastapi uvicorn
-          echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\")\ndef read_root(): return {\"status\": \"DeployFlow is live on AWS EC2!\"}' > app.py
+          echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\")\ndef read_root(): return {\"status\": \"DeployFlow is live on AWS EC2!\"}' > /home/ec2-user/app.py
+          cd /home/ec2-user
           nohup uvicorn app:app --host 0.0.0.0 --port 80 &
           '''
 
-          print('Launching fresh EC2 instance with startup web server...')
+          print('Launching fresh EC2 instance with functional web server...')
           res = ec2.run_instances(
               ImageId=ami_id,
               InstanceType='t2.micro',
