@@ -10,14 +10,19 @@ export default function Deployments() {
     loadDeployments();
   }, []);
 
-  const loadDeployments = async () => {
+const loadDeployments = async () => {
     try {
       const response = await fetchDeployments();
-      const data = Array.isArray(response) 
-        ? response 
-        : (response?.deployments || response?.data || []);
       
-      setDeployments(Array.isArray(data) ? data : []);
+      // Strict fallback logic to guarantee an array is always extracted
+      let extractedArray = [];
+      if (Array.isArray(response)) {
+        extractedArray = response;
+      } else if (response && typeof response === 'object') {
+        extractedArray = response.deployments || response.data || response.items || [];
+      }
+
+      setDeployments(Array.isArray(extractedArray) ? extractedArray : []);
     } catch (error) {
       console.error('Failed to fetch deployments:', error);
       setDeployments([]);
@@ -29,13 +34,10 @@ export default function Deployments() {
   const handleTriggerBuild = async () => {
     try {
       const response = await triggerDeployment('deployflow-core');
-      
-      // Extract single deployment object cleanly from any wrapper format
       const newDep = response?.deployment || response?.data || response;
 
       setDeployments((prev) => {
         const currentList = Array.isArray(prev) ? prev : [];
-        // Ensure we only prepend if newDep is a valid non-array object containing deployment properties
         if (newDep && typeof newDep === 'object' && !Array.isArray(newDep)) {
           return [newDep, ...currentList];
         }
