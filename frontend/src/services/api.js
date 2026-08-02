@@ -28,8 +28,15 @@ export const fetchDeployments = async () => {
 };
 
 export const triggerDeployment = async (repoName) => {
-  const response = await API.post(`/deployments?repo_name=${encodeURIComponent(repoName)}`);
-  return response.data;
+  try {
+    const response = await API.post('/deployments', null, {
+      params: { repo_name: repoName }
+    });
+    return response?.data || null;
+  } catch (error) {
+    console.error('Trigger deployment API error:', error);
+    return null;
+  }
 };
 
 export const fetchMetrics = async () => {
