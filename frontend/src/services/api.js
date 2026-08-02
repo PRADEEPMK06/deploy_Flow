@@ -14,7 +14,12 @@ export const fetchHealth = async () => {
 
 export const fetchRepositories = async () => {
   const response = await API.get('/repositories');
-  return response.data;
+  const data = response.data;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.repositories)) return data.repositories;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
 };
 
 export const addRepository = async (repoData) => {
@@ -24,7 +29,15 @@ export const addRepository = async (repoData) => {
 
 export const fetchDeployments = async () => {
   const response = await API.get('/deployments');
-  return response.data;
+  const data = response.data;
+  
+  // Safely extract array regardless of how the backend wraps it
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.deployments)) return data.deployments;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  
+  return [];
 };
 
 export const triggerDeployment = async (repoName) => {
@@ -32,7 +45,12 @@ export const triggerDeployment = async (repoName) => {
     const response = await API.post('/deployments', null, {
       params: { repo_name: repoName }
     });
-    return response?.data || null;
+    const data = response.data;
+    // Extract single deployment object if wrapped
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      return data.deployment || data.data || data;
+    }
+    return data;
   } catch (error) {
     console.error('Trigger deployment API error:', error);
     return null;
