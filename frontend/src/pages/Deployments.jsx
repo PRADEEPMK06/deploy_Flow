@@ -13,7 +13,6 @@ export default function Deployments() {
   const loadDeployments = async () => {
     try {
       const response = await fetchDeployments();
-      // Safely handle both raw arrays and wrapped objects from APIs
       const data = Array.isArray(response) 
         ? response 
         : (response?.deployments || response?.data || []);
@@ -29,10 +28,18 @@ export default function Deployments() {
 
   const handleTriggerBuild = async () => {
     try {
-      const newDep = await triggerDeployment('deployflow-core');
+      const response = await triggerDeployment('deployflow-core');
+      
+      // Extract single deployment object cleanly from any wrapper format
+      const newDep = response?.deployment || response?.data || response;
+
       setDeployments((prev) => {
         const currentList = Array.isArray(prev) ? prev : [];
-        return newDep ? [newDep, ...currentList] : currentList;
+        // Ensure we only prepend if newDep is a valid non-array object containing deployment properties
+        if (newDep && typeof newDep === 'object' && !Array.isArray(newDep)) {
+          return [newDep, ...currentList];
+        }
+        return currentList;
       });
     } catch (error) {
       console.error('Failed to trigger deployment:', error);
@@ -86,7 +93,7 @@ export default function Deployments() {
                     </td>
                     <td className="py-4 px-6 font-medium text-white flex items-center space-x-2">
                       <Rocket className="h-4 w-4 text-slate-400" />
-                      <span>{dep?.repo || 'Unknown'}</span>
+                      <span>{dep?.repo || dep?.repository || 'Unknown'}</span>
                     </td>
                     <td className="py-4 px-6 text-slate-300">
                       <span className="bg-slate-800 px-2.5 py-1 rounded-md text-xs font-medium border border-slate-700">
@@ -98,15 +105,15 @@ export default function Deployments() {
                     </td>
                     <td className="py-4 px-6">
                       <span className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
-                        dep?.status === 'Success' 
+                        dep?.status === 'Success' || dep?.status === 'success'
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                          : dep?.status === 'Building'
+                          : dep?.status === 'Building' || dep?.status === 'building'
                           ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse'
                           : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                       }`}>
-                        {dep?.status === 'Success' && <CheckCircle2 className="h-3 w-3" />}
-                        {dep?.status === 'Building' && <Clock className="h-3 w-3" />}
-                        {dep?.status === 'Failed' && <AlertCircle className="h-3 w-3" />}
+                        {(dep?.status === 'Success' || dep?.status === 'success') && <CheckCircle2 className="h-3 w-3" />}
+                        {(dep?.status === 'Building' || dep?.status === 'building') && <Clock className="h-3 w-3" />}
+                        {(dep?.status === 'Failed' || dep?.status === 'failed') && <AlertCircle className="h-3 w-3" />}
                         <span>{dep?.status || 'Unknown'}</span>
                       </span>
                     </td>
