@@ -31,7 +31,7 @@ export const fetchDeployments = async () => {
   const response = await API.get('/deployments');
   const data = response.data;
   
-  // Safely extract array regardless of how the backend wraps it
+  // Safely extract array regardless of backend formatting wrappers
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.deployments)) return data.deployments;
   if (Array.isArray(data?.data)) return data.data;
@@ -46,7 +46,8 @@ export const triggerDeployment = async (repoName) => {
       params: { repo_name: repoName }
     });
     const data = response.data;
-    // Extract single deployment object if wrapped
+    
+    // If backend returns an object wrapper containing the single deployment, extract it
     if (data && typeof data === 'object' && !Array.isArray(data)) {
       return data.deployment || data.data || data;
     }
