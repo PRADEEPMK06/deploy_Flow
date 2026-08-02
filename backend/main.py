@@ -3,10 +3,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
 
+from backend.routers import deployment_router, repository_router, dashboard_router
+from backend.api.v1.endpoints import health
+
 app = FastAPI(title="DeployFlow API")
 
-# --- Your existing API routers can go here ---
-# app.include_router(your_router)
+app.include_router(health.router, prefix="/api", tags=["Health"])
+app.include_router(repository_router.router)
+app.include_router(deployment_router.router)
+app.include_router(dashboard_router.router)
 
 # Serve React static assets if the static folder exists
 if os.path.exists("/app/static"):

@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
@@ -6,6 +7,8 @@ from backend.models.deployment_history import DeploymentHistory
 from backend.models.deployment_log import DeploymentLog
 from backend.models.deployment_metric import DeploymentMetric
 from backend.schemas.deployment import DeploymentCreate
+
+logger = logging.getLogger(__name__)
 
 
 class DeploymentService:
@@ -27,12 +30,26 @@ class DeploymentService:
     @staticmethod
     def get_deployment(db: Session, deployment_id: int) -> Optional[Deployment]:
         """Retrieve a deployment by its ID."""
-        return db.query(Deployment).filter(Deployment.id == deployment_id).first()
+        try:
+            return db.query(Deployment).filter(Deployment.id == deployment_id).first()
+        except Exception:
+            logger.exception("Failed to fetch deployment %s", deployment_id)
+            return None
 
     @staticmethod
     def get_deployments(db: Session, skip: int = 0, limit: int = 100) -> List[Deployment]:
         """Retrieve a list of deployments."""
-        return db.query(Deployment).order_by(Deployment.created_at.desc()).offset(skip).limit(limit).all()
+        try:
+            return (
+                db.query(Deployment)
+                .order_by(Deployment.created_at.desc())
+                .offset(skip)
+                .limit(limit)
+                .all()
+            )
+        except Exception:
+            logger.exception("Failed to list deployments")
+            return []
 
     @staticmethod
     def update_deployment_status(
@@ -108,3 +125,35 @@ class DeploymentService:
         db.commit()
         db.refresh(db_history)
         return db_history
+
+    @staticmethod
+    def get_deployment_logs(db: Session, deployment_id: int, skip: int = 0, limit: int = 1000) -> List[DeploymentLog]:
+        """Return logs for a deployment or an empty list when none exist."""
+        try:
+            return (
+                db.query(DeploymentLog)
+                .filter(DeploymentLog.deployment_id == deployment_id)
+                .order_by(DeploymentLog.timestamp.asc())
+                .offset(skip)
+                .limit(limit)
+                .all()
+            )
+        except Exception:
+            logger.exception("Failed to list logs for deployment %s", deployment_id)
+            return []
+
+    @staticmethod
+    def get_deployment_metrics(db: Session, deployment_id: int, skip: int = 0, limit: int = 100) -> List[DeploymentMetric]:
+        """Return metrics for a deployment or an empty list when none exist."""
+        try:
+            return (
+                db.query(DeploymentMetric)
+                .filter(DeploymentMetric.deployment_id == deployment_id)
+                .order_by(DeploymentMetric.timestamp.asc())
+                .offset(skip)
+                .limit(limit)
+                .all()
+            )
+        except Exception:
+            logger.exception("Failed to list metrics for deployment %s", deployment_id)
+            return []

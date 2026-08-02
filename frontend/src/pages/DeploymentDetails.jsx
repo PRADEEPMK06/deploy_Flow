@@ -195,12 +195,12 @@ const DeploymentDetails = () => {
           </div>
 
           <div className="p-4 font-mono text-xs text-slate-300 space-y-1.5 h-96 overflow-y-auto bg-slate-950/90">
-            {logs.map((log, index) => {
+            {(Array.isArray(logs) ? logs : []).map((log, index) => {
               let colorClass = "text-slate-300";
-              if (log.includes("[SUCCESS]")) colorClass = "text-emerald-400 font-semibold";
-              else if (log.includes("[WARNING]")) colorClass = "text-amber-400 font-semibold";
-              else if (log.includes("[ERROR]")) colorClass = "text-rose-400 font-semibold";
-              else if (log.includes("[INFO]")) colorClass = "text-slate-400";
+              if (typeof log === 'string' && log.includes("[SUCCESS]")) colorClass = "text-emerald-400 font-semibold";
+              else if (typeof log === 'string' && log.includes("[WARNING]")) colorClass = "text-amber-400 font-semibold";
+              else if (typeof log === 'string' && log.includes("[ERROR]")) colorClass = "text-rose-400 font-semibold";
+              else if (typeof log === 'string' && log.includes("[INFO]")) colorClass = "text-slate-400";
 
               return (
                 <div key={index} className={`leading-relaxed ${colorClass}`}>

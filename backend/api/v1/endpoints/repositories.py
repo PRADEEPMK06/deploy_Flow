@@ -1,6 +1,6 @@
 import logging
 from typing import List
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
@@ -24,8 +24,7 @@ def create_repository(
 ) -> RepositoryResponse:
     """Register a new repository."""
     logger.info("Received request to register repository: %s", repository_in.repo_url)
-    service = RepositoryService(db)
-    repository = service.create_repository(repository_in)
+    repository = RepositoryService.create_repository(db, repository_in)
     return RepositoryResponse.model_validate(repository)
 
 
@@ -39,8 +38,7 @@ def create_repository(
 def list_repositories(db: Session = Depends(get_db)) -> List[RepositoryResponse]:
     """List all registered repositories."""
     logger.info("Received request to list all repositories")
-    service = RepositoryService(db)
-    repositories = service.get_repositories()
+    repositories = RepositoryService.get_repositories(db)
     return [RepositoryResponse.model_validate(repo) for repo in repositories]
 
 
@@ -54,8 +52,9 @@ def list_repositories(db: Session = Depends(get_db)) -> List[RepositoryResponse]
 def get_repository(id: int, db: Session = Depends(get_db)) -> RepositoryResponse:
     """Get a specific repository by ID."""
     logger.info("Received request to get repository ID: %d", id)
-    service = RepositoryService(db)
-    repository = service.get_repository_by_id(id)
+    repository = RepositoryService.get_repository(db, id)
+    if not repository:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repository not found.")
     return RepositoryResponse.model_validate(repository)
 
 
@@ -68,5 +67,4 @@ def get_repository(id: int, db: Session = Depends(get_db)) -> RepositoryResponse
 def delete_repository(id: int, db: Session = Depends(get_db)) -> None:
     """Delete a repository by ID."""
     logger.info("Received request to delete repository ID: %d", id)
-    service = RepositoryService(db)
-    service.delete_repository(id)
+    RepositoryService.delete_repository(db, id)

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Rocket, CheckCircle2, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import { fetchDeployments, triggerDeployment } from '../services/api';
 
@@ -94,7 +95,13 @@ export default function Deployments() {
                 safeList.map((dep, index) => (
                   <tr key={dep?.id || index} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-4 px-6 font-mono text-xs text-indigo-400 font-medium">
-                      {dep?.id || 'N/A'}
+                      {dep?.id ? (
+                        <Link to={`/deployments/${dep.id}`} className="hover:text-indigo-300">
+                          {dep.id}
+                        </Link>
+                      ) : (
+                        'N/A'
+                      )}
                     </td>
                     <td className="py-4 px-6 font-medium text-white flex items-center space-x-2">
                       <Rocket className="h-4 w-4 text-slate-400" />

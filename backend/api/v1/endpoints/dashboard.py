@@ -21,6 +21,5 @@ router = APIRouter()
 def get_dashboard_overview(db: Session = Depends(get_db)) -> DashboardOverviewResponse:
     """Get overall dashboard metrics and overview information."""
     logger.info("Received request for dashboard overview statistics")
-    service = DashboardService(db)
-    overview = service.get_overview()
+    overview = DashboardService.get_dashboard_overview(db)
     return DashboardOverviewResponse.model_validate(overview)

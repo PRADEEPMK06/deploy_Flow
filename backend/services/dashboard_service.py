@@ -44,3 +44,8 @@ class DashboardService:
             recent_deployments=recent_deployments,
             active_repositories=active_repositories,
         )
+
+    @staticmethod
+    def get_overview(db: Session) -> DashboardOverviewResponse:
+        """Backward-compatible alias used by older routers."""
+        return DashboardService.get_dashboard_overview(db)

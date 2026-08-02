@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Rocket, Globe, ExternalLink, Terminal, Cpu, CheckCircle2, AlertCircle } from 'lucide-react';
-import axios from 'axios';
+import { fetchDeployments, triggerDeployment } from '../services/api';
 
 export default function DeployLive() {
   const [repoUrl, setRepoUrl] = useState('');
@@ -11,15 +11,11 @@ export default function DeployLive() {
 
   const fetchActiveDeployments = async () => {
     try {
-      const res = await axios.get('/api/active-deployments');
-      // Ensure we only set state if data is truly an array, otherwise default to []
-      if (Array.isArray(res.data)) {
-        setDeployments(res.data);
-      } else {
-        setDeployments([]);
-      }
+      const data = await fetchDeployments();
+      setDeployments(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch live deployments', err);
+      setDeployments([]);
     }
   };
 
@@ -37,13 +33,9 @@ export default function DeployLive() {
     setError(null);
 
     try {
-      const res = await axios.post('/api/deploy-live', {
-        repo_url: repoUrl,
-        branch: branch,
-        port: 8080
-      });
-      // Safely prepend new deployment while ensuring deployments is an array
-      setDeployments((prev) => [res.data, ...(Array.isArray(prev) ? prev : [])]);
+      const res = await triggerDeployment(repoUrl);
+      const nextDeployment = res && typeof res === 'object' ? { ...res, repo_url: repoUrl, branch } : { repo_url: repoUrl, branch, status: 'QUEUED' };
+      setDeployments((prev) => [nextDeployment, ...(Array.isArray(prev) ? prev : [])]);
       setRepoUrl('');
     } catch (err) {
       setError(err.response?.data?.detail || 'Deployment failed. Make sure Docker is running.');

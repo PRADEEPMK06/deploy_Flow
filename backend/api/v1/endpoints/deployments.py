@@ -1,6 +1,7 @@
 import logging
-from typing import List
+from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
@@ -27,8 +28,7 @@ def create_deployment(
 ) -> DeploymentResponse:
     """Trigger a new deployment."""
     logger.info("Received request to trigger deployment for repository ID: %d", deployment_in.repository_id)
-    service = DeploymentService(db)
-    deployment = service.trigger_deployment(deployment_in.repository_id)
+    deployment = DeploymentService.create_deployment(db, deployment_in)
     return DeploymentResponse.model_validate(deployment)
 
 
@@ -42,8 +42,7 @@ def create_deployment(
 def list_deployments(db: Session = Depends(get_db)) -> List[DeploymentResponse]:
     """List all deployments."""
     logger.info("Received request to list all deployments")
-    service = DeploymentService(db)
-    deployments = service.get_deployments()
+    deployments = DeploymentService.get_deployments(db)
     return [DeploymentResponse.model_validate(dep) for dep in deployments]
 
 
@@ -57,8 +56,9 @@ def list_deployments(db: Session = Depends(get_db)) -> List[DeploymentResponse]:
 def get_deployment(id: int, db: Session = Depends(get_db)) -> DeploymentResponse:
     """Get deployment details by ID."""
     logger.info("Received request to get deployment ID: %d", id)
-    service = DeploymentService(db)
-    deployment = service.get_deployment_by_id(id)
+    deployment = DeploymentService.get_deployment(db, id)
+    if not deployment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deployment not found.")
     return DeploymentResponse.model_validate(deployment)
 
 
@@ -72,8 +72,7 @@ def get_deployment(id: int, db: Session = Depends(get_db)) -> DeploymentResponse
 def get_deployment_logs(id: int, db: Session = Depends(get_db)) -> List[LogResponse]:
     """Get logs for a specific deployment."""
     logger.info("Received request to get logs for deployment ID: %d", id)
-    service = DeploymentService(db)
-    logs = service.get_deployment_logs(id)
+    logs = DeploymentService.get_deployment_logs(db, id)
     return [LogResponse.model_validate(log) for log in logs]
 
 
@@ -87,21 +86,19 @@ def get_deployment_logs(id: int, db: Session = Depends(get_db)) -> List[LogRespo
 def get_deployment_metrics(id: int, db: Session = Depends(get_db)) -> List[MetricResponse]:
     """Get metrics for a specific deployment."""
     logger.info("Received request to get metrics for deployment ID: %d", id)
-    service = DeploymentService(db)
-    metrics = service.get_deployment_metrics(id)
+    metrics = DeploymentService.get_deployment_metrics(db, id)
     return [MetricResponse.model_validate(metric) for metric in metrics]
 
 
 @router.post(
     "/{id}/rollback",
-    response_model=DeploymentResponse,
+    response_model=Dict[str, Any],
     status_code=status.HTTP_200_OK,
     summary="Rollback Deployment",
     description="Rollback a deployment to its previous stable version.",
 )
-def rollback_deployment(id: int, db: Session = Depends(get_db)) -> DeploymentResponse:
+def rollback_deployment(id: int, db: Session = Depends(get_db)) -> Dict[str, Any]:
     """Rollback a specific deployment."""
     logger.info("Received request to rollback deployment ID: %d", id)
-    service = RollbackService(db)
-    deployment = service.rollback_deployment(id)
-    return DeploymentResponse.model_validate(deployment)
+    deployment = RollbackService.rollback_deployment(db, id)
+    return deployment
