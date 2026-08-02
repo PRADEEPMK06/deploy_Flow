@@ -1,64 +1,31 @@
 import axios from 'axios';
 
-const API = axios.create({
-  baseURL: '/api', // Proxied via vite.config.js to http://localhost:8000
+const API_BASE_URL = 'http://localhost:8000/api'; // Adjust to your backend URL if different
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-export const fetchHealth = async () => {
-  const response = await API.get('/health');
-  return response.data;
-};
-
-export const fetchRepositories = async () => {
-  const response = await API.get('/repositories');
-  const data = response.data;
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.repositories)) return data.repositories;
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.items)) return data.items;
-  return [];
-};
-
-export const addRepository = async (repoData) => {
-  const response = await API.post('/repositories', repoData);
-  return response.data;
-};
-
 export const fetchDeployments = async () => {
-  const response = await API.get('/deployments');
-  const data = response.data;
-  
-  // Safely extract array regardless of backend formatting wrappers
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.deployments)) return data.deployments;
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.items)) return data.items;
-  
-  return [];
+  try {
+    const response = await apiClient.get('/deployments');
+    // Ensure we always return the raw data payload, whether it's an array or object
+    return response.data;
+  } catch (error) {
+    console.error('API Error fetching deployments:', error);
+    return [];
+  }
 };
 
 export const triggerDeployment = async (repoName) => {
   try {
-    const response = await API.post('/deployments', null, {
-      params: { repo_name: repoName }
-    });
-    const data = response.data;
-    
-    // If backend returns an object wrapper containing the single deployment, extract it
-    if (data && typeof data === 'object' && !Array.isArray(data)) {
-      return data.deployment || data.data || data;
-    }
-    return data;
+    const response = await apiClient.post('/deployments/trigger', { repo: repoName });
+    return response.data;
   } catch (error) {
-    console.error('Trigger deployment API error:', error);
-    return null;
+    console.error('API Error triggering deployment:', error);
+    throw error;
   }
-};
-
-export const fetchMetrics = async () => {
-  const response = await API.get('/metrics');
-  return response.data;
 };

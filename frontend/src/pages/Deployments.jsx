@@ -14,15 +14,16 @@ const loadDeployments = async () => {
     try {
       const response = await fetchDeployments();
       
-      // Strict fallback logic to guarantee an array is always extracted
-      let extractedArray = [];
+      // If response itself is an array
       if (Array.isArray(response)) {
-        extractedArray = response;
-      } else if (response && typeof response === 'object') {
-        extractedArray = response.deployments || response.data || response.items || [];
+        setDeployments(response);
+        return;
       }
 
-      setDeployments(Array.isArray(extractedArray) ? extractedArray : []);
+      // If response is wrapped in an object like { data: [...] } or { deployments: [...] }
+      const data = response?.deployments || response?.data || response?.items;
+      setDeployments(Array.isArray(data) ? data : []);
+
     } catch (error) {
       console.error('Failed to fetch deployments:', error);
       setDeployments([]);
