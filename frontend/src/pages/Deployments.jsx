@@ -12,7 +12,12 @@ export default function Deployments() {
 
   const loadDeployments = async () => {
     try {
-      const data = await fetchDeployments();
+      const response = await fetchDeployments();
+      // Safely handle both raw arrays and wrapped objects from APIs
+      const data = Array.isArray(response) 
+        ? response 
+        : (response?.deployments || response?.data || []);
+      
       setDeployments(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch deployments:', error);
@@ -25,7 +30,10 @@ export default function Deployments() {
   const handleTriggerBuild = async () => {
     try {
       const newDep = await triggerDeployment('deployflow-core');
-      setDeployments((prev) => [newDep, ...(Array.isArray(prev) ? prev : [])]);
+      setDeployments((prev) => {
+        const currentList = Array.isArray(prev) ? prev : [];
+        return newDep ? [newDep, ...currentList] : currentList;
+      });
     } catch (error) {
       console.error('Failed to trigger deployment:', error);
     }
