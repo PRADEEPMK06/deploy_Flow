@@ -3,6 +3,7 @@ import { Rocket, CheckCircle2, Clock, AlertCircle, RefreshCw } from 'lucide-reac
 import { fetchDeployments, triggerDeployment } from '../services/api';
 
 export default function Deployments() {
+  // Ensure default state is strictly initialized as an array
   const [deployments, setDeployments] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -10,20 +11,18 @@ export default function Deployments() {
     loadDeployments();
   }, []);
 
-const loadDeployments = async () => {
+  const loadDeployments = async () => {
     try {
       const response = await fetchDeployments();
       
-      // If response itself is an array
+      let extractedArray = [];
       if (Array.isArray(response)) {
-        setDeployments(response);
-        return;
+        extractedArray = response;
+      } else if (response && typeof response === 'object') {
+        extractedArray = response.deployments || response.data || response.items || [];
       }
 
-      // If response is wrapped in an object like { data: [...] } or { deployments: [...] }
-      const data = response?.deployments || response?.data || response?.items;
-      setDeployments(Array.isArray(data) ? data : []);
-
+      setDeployments(Array.isArray(extractedArray) ? extractedArray : []);
     } catch (error) {
       console.error('Failed to fetch deployments:', error);
       setDeployments([]);
@@ -48,6 +47,9 @@ const loadDeployments = async () => {
       console.error('Failed to trigger deployment:', error);
     }
   };
+
+  // Safe wrapper: guarantees safeList is ALWAYS an array before rendering
+  const safeList = Array.isArray(deployments) ? deployments : [];
 
   return (
     <div className="space-y-6">
@@ -84,12 +86,12 @@ const loadDeployments = async () => {
                 <tr>
                   <td colSpan="6" className="py-8 text-center text-slate-500">Loading deployments from backend...</td>
                 </tr>
-              ) : !Array.isArray(deployments) || deployments.length === 0 ? (
+              ) : safeList.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="py-8 text-center text-slate-500">No deployments recorded yet.</td>
                 </tr>
               ) : (
-                deployments.map((dep, index) => (
+                safeList.map((dep, index) => (
                   <tr key={dep?.id || index} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-4 px-6 font-mono text-xs text-indigo-400 font-medium">
                       {dep?.id || 'N/A'}
