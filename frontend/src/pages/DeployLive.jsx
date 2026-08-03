@@ -109,7 +109,7 @@ export default function DeployLive() {
               No live container instances running yet. Launch one above!
             </div>
           ) : (
-            deployments.map((dep, index) => (
+            Array.isArray(deployments) && deployments.map((dep, index) => (
               <div key={index} className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center space-x-3">

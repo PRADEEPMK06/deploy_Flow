@@ -78,7 +78,7 @@ export default function Deployments() {
                   <td colSpan="6" className="py-8 text-center text-slate-500">No deployments recorded yet.</td>
                 </tr>
               ) : (
-                deployments.map((dep, index) => (
+                Array.isArray(deployments) && deployments.map((dep, index) => (
                   <tr key={dep?.id || index} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-4 px-6 font-mono text-xs text-indigo-400 font-medium">
                       {dep?.id || 'N/A'}
