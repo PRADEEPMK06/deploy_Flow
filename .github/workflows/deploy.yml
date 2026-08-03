@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
@@ -35,10 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
@@ -53,10 +53,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@master
@@ -94,7 +94,7 @@ jobs:
           script: |
             cd ~/DeployFlow
 
-            # 1. Pull the absolute latest code safely (overwrites any local drift)
+            # 1. Pull the absolute latest code safely
             git fetch origin main
             git reset --hard origin/main
 
@@ -104,11 +104,11 @@ jobs:
             # 3. Stop the running container gracefully
             sudo docker-compose down
 
-            # 4. Build using Docker cache (fast & space-efficient, only rebuilds what changed)
+            # 4. Build using Docker cache
             sudo docker-compose build
 
             # 5. Start the new container
             sudo docker-compose up -d
 
-            # 6. Clean up ONLY old, unused dangling Docker images to keep disk clean
+            # 6. Clean up old dangling Docker images
             sudo docker image prune -f
