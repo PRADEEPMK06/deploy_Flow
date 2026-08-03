@@ -8,7 +8,7 @@ from backend.routers import deployment_router, repository_router, dashboard_rout
 from backend.api.v1.endpoints import health
 
 # --- ADD THESE TWO LINES ---
-from backend.database import engine, Base
+from backend.core.database import engine, Base
 import backend.models  # Ensures your tables get registered
 
 # Automatically create all tables in Supabase on startup if they don't exist
