@@ -4,7 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PROJECT_NAME: str = "DeployFlow"
     PROJECT_VERSION: str = "1.0.0"
-    DATABASE_URL: str = "postgresql://postgres:postgres@db:5432/deployflow"
+    # Pydantic will automatically pick up DATABASE_URL from GitHub Secrets / environment variables
+    DATABASE_URL: str
 
     model_config = SettingsConfigDict(
         env_file=".env",

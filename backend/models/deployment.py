@@ -9,6 +9,7 @@ class Deployment(Base):
     """Database model for application deployments."""
 
     __tablename__ = "deployments"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True, index=True)
     repository_id = Column(Integer, ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False)
@@ -20,7 +21,7 @@ class Deployment(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    repository = relationship("Repository", back_populates="deployments")
-    logs = relationship("DeploymentLog", back_populates="deployment", cascade="all, delete-orphan")
-    metrics = relationship("DeploymentMetric", back_populates="deployment", cascade="all, delete-orphan")
-    history = relationship("DeploymentHistory", back_populates="deployment", cascade="all, delete-orphan")
+    repository = relationship("backend.models.repository.Repository", back_populates="deployments")
+    logs = relationship("backend.models.deployment_log.DeploymentLog", back_populates="deployment", cascade="all, delete-orphan")
+    metrics = relationship("backend.models.deployment_metric.DeploymentMetric", back_populates="deployment", cascade="all, delete-orphan")
+    history = relationship("backend.models.deployment_history.DeploymentHistory", back_populates="deployment", cascade="all, delete-orphan")
