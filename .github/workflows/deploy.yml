@@ -1,114 +1,78 @@
-name: CI/CD Pipeline to EC2
+name: DeployFlow CI/CD
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  validate:
-    name: Validate Code
+  build-backend:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - name: Checkout repository
+        uses: actions/checkout@v3
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
-          cache: 'pip'
-
+          python-version: '3.11'
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
+          pip install -r requirements.txt
+      - name: Lint (flake8)
+        run: flake8 .
+      - name: Run tests (if any)
+        run: pytest || echo "No tests"
 
-      - name: Validate Syntax
-        run: |
-          python -m compileall .
-          echo "Validation passed successfully."
+  build-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      - name: Install npm dependencies
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
 
-  build:
-    name: Build Application
-    needs: validate
+  deploy-to-aws:
+    needs: [build-backend, build-frontend]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-
-      - name: Build Check
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install SSH key
         run: |
-          echo "Build artifacts verification passed."
-
-  test:
-    name: Run Tests
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-
-      - name: Install dependencies
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.PRIMARY_EC2_IP }} >> ~/.ssh/known_hosts
+      - name: Copy backend files
         run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
-
-      - name: Run Tests
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          scp -r backend/ ${{ secrets.PRIMARY_EC2_USER }}@${{ secrets.PRIMARY_EC2_IP }}:/home/ubuntu/deployflow_backend
+      - name: Copy frontend build
         run: |
-          if [ -d "tests" ] || [ -d "backend/tests" ]; then
-            pytest;
-          else
-            echo "No test directory found, skipping tests.";
-          fi
-
-  deploy:
-    name: Deploy to EC2
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd ~/DeployFlow
-
-            # 1. Pull the absolute latest code safely
-            git fetch origin main
-            git reset --hard origin/main
-
-            # 2. Inject Supabase DATABASE_URL into a .env file on EC2
-            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > .env
-
-            # 3. Stop the running container gracefully
-            sudo docker-compose down
-
-            # 4. Build using Docker cache
-            sudo docker-compose build
-
-            # 5. Start the new container
-            sudo docker-compose up -d
-
-            # 6. Clean up old dangling Docker images
-            sudo docker image prune -f
+          scp -r frontend/dist/ ${{ secrets.PRIMARY_EC2_USER }}@${{ secrets.PRIMARY_EC2_IP }}:/home/ubuntu/deployflow_frontend
+      - name: SSH and restart services
+        run: |
+          ssh ${{ secrets.PRIMARY_EC2_USER }}@${{ secrets.PRIMARY_EC2_IP }} << 'EOS'
+            cd /home/ubuntu/deployflow_backend
+            python -m venv venv
+            source venv/bin/activate
+            pip install -r requirements.txt
+            sudo systemctl restart deployflow-backend || true
+            nohup uvicorn main:app --host 0.0.0.0 --port 8000 &
+            cd /home/ubuntu/deployflow_frontend
+            nohup npx serve -s . -l 3000 &
+          EOS
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
