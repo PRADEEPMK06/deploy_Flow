@@ -17,6 +17,11 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="DeployFlow API")
 
+@app.get("/ping")
+def ping() -> dict:
+    return {"ping": "pong"}
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
