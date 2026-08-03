@@ -56,22 +56,30 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.PRIMARY_EC2_IP }} >> ~/.ssh/known_hosts
-      - name: Copy backend files
+      - name: Create remote directories
         run: |
-          scp -r backend/ ${{ secrets.PRIMARY_EC2_USER }}@${{ secrets.PRIMARY_EC2_IP }}:/home/ubuntu/deployflow_backend
-      - name: Copy frontend build
+          ssh ${{ secrets.PRIMARY_EC2_USER }}@${{ secrets.PRIMARY_EC2_IP }} "mkdir -p /home/ubuntu/deployflow_app"
+      - name: Clone repository on remote
+        env:
+          GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          scp -r frontend/dist/ ${{ secrets.PRIMARY_EC2_USER }}@${{ secrets.PRIMARY_EC2_IP }}:/home/ubuntu/deployflow_frontend
+          ssh ${{ secrets.PRIMARY_EC2_USER }}@${{ secrets.PRIMARY_EC2_IP }} << 'EOS'
+            cd /home/ubuntu/deployflow_app
+            git init
+            git remote add origin https://$GIT_TOKEN@github.com/${{ github.repository }}.git
+            git fetch --depth=1 origin main
+            git reset --hard FETCH_HEAD
+          EOS
       - name: SSH and restart services
         run: |
           ssh ${{ secrets.PRIMARY_EC2_USER }}@${{ secrets.PRIMARY_EC2_IP }} << 'EOS'
-            cd /home/ubuntu/deployflow_backend
+            cd /home/ubuntu/deployflow_app/backend
             python -m venv venv
             source venv/bin/activate
             pip install -r requirements.txt
             sudo systemctl restart deployflow-backend || true
             nohup uvicorn main:app --host 0.0.0.0 --port 8000 &
-            cd /home/ubuntu/deployflow_frontend
+            cd /home/ubuntu/deployflow_app/frontend
             nohup npx serve -s . -l 3000 &
           EOS
     env:
