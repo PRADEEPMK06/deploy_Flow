@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 
-const DATA_FILE = path.resolve(__dirname, '../metadata.json');
+const DATA_FILE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../deployments.json');
 
 /**
  * Persist deployment data to a JSON file.
@@ -23,10 +24,11 @@ export function loadDeployments<T>(): T[] {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      return JSON.parse(raw) as T[];
+      const parsed: unknown = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed as T[] : [];
     }
   } catch (e) {
     console.error('Failed to load deployments:', e);
   }
-  return [] as any;
-}
+  return [];
+}

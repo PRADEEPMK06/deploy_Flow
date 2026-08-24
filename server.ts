@@ -6,7 +6,7 @@ import { exec } from 'child_process';
 import util from 'util';
 import { Client as SshClient } from 'ssh2';
 
-import { saveDeployments, loadDeployments } from "./src/persistence";
+import { saveDeployments, loadDeployments } from "./src/persistence.js";
 
 // New types for deployment modes
 enum DeploymentMode {
@@ -103,10 +103,11 @@ interface LiveDeploymentRecord {
 const activeDeployments = new Map<string, LiveDeploymentRecord>();
 
 // Load persisted deployments on startup
-loadDeployments().forEach((d) => {
-  // Ensure enum values are correctly typed when loading from JSON
-  // Type casting is safe because we control the saved shape
-  activeDeployments.set(d.id, d as any);
+loadDeployments<LiveDeploymentRecord>().forEach((d) => {
+  activeDeployments.set(d.id, {
+    ...d,
+    mode: d.mode ?? DeploymentMode.SELF
+  });
 });
 
 // Helper to persist the entire active deployment map
@@ -612,7 +613,8 @@ app.post('/api/deployments', async (req, res) => {
     envVars: envVars || { APP_ENV: 'production' },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    logs: [initialLog]
+    logs: [initialLog],
+    mode: DeploymentMode.SELF
   };
 
   activeDeployments.set(deploymentId, record);
