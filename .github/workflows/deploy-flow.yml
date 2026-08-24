@@ -1,20 +1,37 @@
-name: DeployFlow – CLI Login → Build & Push
+# .github/workflows/deploy-flow.yml
+name: DeployFlow CI/CD
 
+# Trigger on pushes to the main branch (adjust if you use a different branch)
 on:
   push:
     branches: [ main ]
 
 jobs:
   # -------------------------------------------------
-  # Job 1 – pure Docker CLI login (and verification)
+  # 1️⃣ Docker Hub login (pure CLI) – validates secrets
   # -------------------------------------------------
   docker-login:
     runs-on: ubuntu-latest
     outputs:
       login-ok: ${{ steps.verify.outputs.success }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # -------------------------------------------------
+      # Debug: make sure the updated secret names are present (values stay masked)
+      # -------------------------------------------------
+      - name: Verify Docker Hub secrets (masked)
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}   # latest secret name
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}         # latest secret name
+        run: |
+          echo "Docker Hub username length: ${#DOCKER_HUB_USERNAME}"
+          echo "Docker Hub token length: ${#DOCKER_HUB_TOKEN}"
+
+      # -------------------------------------------------
+      # Docker Hub login – pure Docker CLI (no action wrapper)
+      # -------------------------------------------------
       - name: Docker login via CLI
         env:
           DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
@@ -22,6 +39,9 @@ jobs:
         run: |
           echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
 
+      # -------------------------------------------------
+      # Verify that login succeeded (config file created)
+      # -------------------------------------------------
       - name: Verify login succeeded
         id: verify
         run: |
@@ -35,18 +55,21 @@ jobs:
           fi
 
   # -------------------------------------------------
-  # Job 2 – build the image and push it
+  # 2️⃣ Build the image and push it (depends on docker-login)
   # -------------------------------------------------
   build-and-push:
     needs: docker-login
     if: ${{ needs.docker-login.outputs.login-ok == 'true' }}
     runs-on: ubuntu-latest
     env:
-      DOCKER_IMAGE: pradeepmk799/deployflow   # change if you want a different repo/tag
+      DOCKER_IMAGE: pradeepmk799/deployflow   # change only the repo name if you rename it
+      CONTAINER_NAME: deployflow-app
+      APP_PORT: 8000
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # Re‑login because each job gets a fresh VM
+      # Each job gets a fresh runner, so we must log in again before we can push
       - name: Docker login again (CLI)
         env:
           DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
@@ -61,3 +84,30 @@ jobs:
       - name: Push Docker image
         run: |
           docker push $DOCKER_IMAGE
+
+      # -------------------------------------------------
+      # (Optional) Deploy the image on the EC2 host – uses EC2 secrets
+      # -------------------------------------------------
+      - name: Deploy to EC2 (self‑mode)
+        if: always()   # runs even if the previous step fails; remove if you only want on success
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST_IP }}
+          EC2_USER: ${{ secrets.EC2_SSH_USERNAME }}
+          EC2_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          IMAGE: ${{ env.DOCKER_IMAGE }}
+          CONTAINER: ${{ env.CONTAINER_NAME }}
+          PORT: ${{ env.APP_PORT }}
+        run: |
+          # Write the PEM key to a temporary file with strict permissions
+          echo "${EC2_KEY}" > ec2_key.pem
+          chmod 600 ec2_key.pem
+
+          # Pull the newly‑pushed image on the remote host
+          ssh -i ec2_key.pem -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} "docker pull ${IMAGE}"
+
+          # Stop any previous container and run the new one
+          ssh -i ec2_key.pem -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} \
+            "docker rm -f ${CONTAINER} || true && docker run -d --name ${CONTAINER} -p ${PORT}:${PORT} ${IMAGE}"
+
+          # Clean up the temporary key file
+          rm -f ec2_key.pem
