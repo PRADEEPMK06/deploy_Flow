@@ -6,6 +6,26 @@ import { exec } from 'child_process';
 import util from 'util';
 import { Client as SshClient } from 'ssh2';
 
+import path from 'path';
+import { loadDeployments, saveDeployments } from './src/persistence';
+
+// New types for deployment modes
+enum DeploymentMode {
+  SELF = 'self',
+  REMOTE = 'remote'
+}
+
+interface RemoteSshConfig {
+  host: string;
+  username: string;
+  privateKey: string;
+  port?: number;
+  passphrase?: string;
+}
+
+// Extend LiveDeploymentRecord later in the file
+
+
 dotenv.config();
 
 const execAsync = util.promisify(exec);
@@ -75,9 +95,33 @@ interface LiveDeploymentRecord {
     message: string;
     step?: string;
   }>;
+  // New fields for dual deployment mode
+  mode: DeploymentMode;
+  sshConfig?: RemoteSshConfig;
 }
 
-const activeDeployments: Map<string, LiveDeploymentRecord> = new Map();
+// Persistence utilities
+import { loadDeployments, saveDeployments } from './src/persistence';
+
+// Load persisted deployments on startup
+loadDeployments().forEach((d) => {
+  // Ensure enum values are correctly typed when loading from JSON
+  // Type casting is safe because we control the saved shape
+  activeDeployments.set(d.id, d as any);
+});
+
+// Helper to persist the entire active deployment map
+function persistAllDeployments() {
+  const all = Array.from(activeDeployments.values());
+  saveDeployments(all);
+}
+
+// Update record after any status change and persist
+function updateRecord(record: LiveDeploymentRecord) {
+  activeDeployments.set(record.id, record);
+  persistAllDeployments();
+}
+
 
 // Helper: Run command on local host or via SSH
 function runSshCommand(
@@ -162,14 +206,15 @@ function runSshCommand(
 // DOCKER ENGINE EXECUTION HELPER
 // (Runs locally on EC2 host, or falls back gracefully)
 // -------------------------------------------------------------
-async function executeDockerCommand(cmd: string): Promise<{ stdout: string; stderr: string; code: number }> {
-  // If SSH is configured with private key, we can run via SSH on the host
-  if (ec2SshConfig.privateKey && ec2SshConfig.status === 'CONNECTED') {
+async function executeDockerCommand(cmd: string, sshConfig?: SshConnectionOptions): Promise<{ stdout: string; stderr: string; code: number }> {
+  // If SSH config with private key is provided (or global config has key) we can run via SSH on the host
+  const configToUse = sshConfig || ec2SshConfig;
+  if (configToUse.privateKey && configToUse.status === 'CONNECTED') {
     try {
-      const sshRes = await runSshCommand(cmd, ec2SshConfig, 25000);
+      const sshRes = await runSshCommand(cmd, configToUse, 25000);
       return { stdout: sshRes.stdout, stderr: sshRes.stderr, code: sshRes.code };
     } catch (e: any) {
-      console.warn(`[Docker SSH fallback] Error executing "${cmd}":`, e.message);
+      console.warn(`[Docker SSH fallback] Error executing "${cmd}" with provided SSH config:`, e.message);
     }
   }
 
