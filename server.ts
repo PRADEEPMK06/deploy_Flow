@@ -51,6 +51,9 @@ interface SshConnectionOptions {
   host: string;
   username: string;
   status?: string;
+  port?: number;
+  privateKey?: string;
+  passphrase?: string;
 }
 
 let ec2SshConfig = {
