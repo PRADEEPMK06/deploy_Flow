@@ -1,5 +1,4 @@
-# .github/workflows/deploy-flow.yml
-name: DeployFlow – Login → Build & Push
+name: DeployFlow – CLI Login → Build & Push
 
 on:
   push:
@@ -7,29 +6,25 @@ on:
 
 jobs:
   # -------------------------------------------------
-  # 1️⃣ Job: Docker Hub login & verification
+  # Job 1 – pure Docker CLI login (and verification)
   # -------------------------------------------------
   docker-login:
     runs-on: ubuntu-latest
     outputs:
-      # This output is just a flag – it will be “true” if the login succeeded.
       login-ok: ${{ steps.verify.outputs.success }}
     steps:
-      - name: Checkout (required for the login‑action to work)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Docker login
-        id: login
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      - name: Docker login via CLI
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
 
       - name: Verify login succeeded
         id: verify
         run: |
-          # The login‑action writes `~/.docker/config.json`.
-          # If the file exists and contains the auth entry, we consider it a success.
           if [ -f "${HOME}/.docker/config.json" ]; then
             echo "Docker login succeeded"
             echo "success=true" >> $GITHUB_OUTPUT
@@ -40,27 +35,24 @@ jobs:
           fi
 
   # -------------------------------------------------
-  # 2️⃣ Job: Build the image and push it
+  # Job 2 – build the image and push it
   # -------------------------------------------------
   build-and-push:
-    needs: docker-login                # wait for the login job
+    needs: docker-login
     if: ${{ needs.docker-login.outputs.login-ok == 'true' }}
     runs-on: ubuntu-latest
-
     env:
-      # Same image name used in the Dockerfile example
-      DOCKER_IMAGE: pradeepmk799/deployflow
-
+      DOCKER_IMAGE: pradeepmk799/deployflow   # change if you want a different repo/tag
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # Re‑login – each job gets a fresh runner, so we need the credentials again
-      - name: Docker login (again)
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      # Re‑login because each job gets a fresh VM
+      - name: Docker login again (CLI)
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
 
       - name: Build Docker image
         run: |
