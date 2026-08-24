@@ -6,7 +6,6 @@ import { exec } from 'child_process';
 import util from 'util';
 import { Client as SshClient } from 'ssh2';
 
-import path from 'path';
 import { loadDeployments, saveDeployments } from './src/persistence';
 
 // New types for deployment modes
