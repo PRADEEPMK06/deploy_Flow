@@ -1,0 +1,6 @@
+{
+  "name": "DeployFlow - AWS EC2 & Docker Hub CI/CD Deployment Engine",
+  "description": "Automated CI/CD deployment platform: clone GitHub repo or upload ZIP, build Docker image, push to Docker Hub public repository, pull and deploy live container on AWS EC2 with distinct port endpoints.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

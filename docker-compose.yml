@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  deployflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pradeepmk799/deployflow:latest
+    container_name: deployflow-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - NODE_ENV=production
+      - EC2_HOST_IP=13.21.45.43
+      - DOCKER_HUB_USER=pradeepmk799
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
