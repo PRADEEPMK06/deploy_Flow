@@ -1,70 +1,71 @@
 # .github/workflows/deploy-flow.yml
-name: DeployFlow CI/CD
+name: DeployFlow – Login → Build & Push
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest          # Linux is required for the docker/login-action
-    env:
-      DOCKER_IMAGE: pradeepmk17/deployflow   # <namespace>/<repo>
-      CONTAINER_NAME: deployflow-app
-      APP_PORT: 8000
-
+  # -------------------------------------------------
+  # 1️⃣ Job: Docker Hub login & verification
+  # -------------------------------------------------
+  docker-login:
+    runs-on: ubuntu-latest
+    outputs:
+      # This output is just a flag – it will be “true” if the login succeeded.
+      login-ok: ${{ steps.verify.outputs.success }}
     steps:
-      # -------------------------------------------------
-      # 1️⃣ Checkout source
-      # -------------------------------------------------
-      - name: Checkout repository
+      - name: Checkout (required for the login‑action to work)
         uses: actions/checkout@v4
 
-      # -------------------------------------------------
-      # 2️⃣ Docker Hub login – **uses the secrets**
-      # -------------------------------------------------
       - name: Docker login
+        id: login
         uses: docker/login-action@v3
         with:
-          logout: true                # removes credentials after the job finishes
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      # -------------------------------------------------
-      # 3️⃣ Build the Docker image
-      # -------------------------------------------------
+      - name: Verify login succeeded
+        id: verify
+        run: |
+          # The login‑action writes `~/.docker/config.json`.
+          # If the file exists and contains the auth entry, we consider it a success.
+          if [ -f "${HOME}/.docker/config.json" ]; then
+            echo "Docker login succeeded"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "Docker login failed"
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+  # -------------------------------------------------
+  # 2️⃣ Job: Build the image and push it
+  # -------------------------------------------------
+  build-and-push:
+    needs: docker-login                # wait for the login job
+    if: ${{ needs.docker-login.outputs.login-ok == 'true' }}
+    runs-on: ubuntu-latest
+
+    env:
+      # Same image name used in the Dockerfile example
+      DOCKER_IMAGE: pradeepmk799/deployflow
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Re‑login – each job gets a fresh runner, so we need the credentials again
+      - name: Docker login (again)
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
       - name: Build Docker image
         run: |
-          docker build -t ${{ env.DOCKER_IMAGE }} .
+          docker build -t $DOCKER_IMAGE .
 
-      # -------------------------------------------------
-      # 4️⃣ Push the image to Docker Hub
-      # -------------------------------------------------
-      - name: Push image
+      - name: Push Docker image
         run: |
-          docker push ${{ env.DOCKER_IMAGE }}
-
-      # -------------------------------------------------
-      # 5️⃣ (Optional) Deploy to EC2 – uses your existing SSH secrets
-      # -------------------------------------------------
-      - name: Deploy container on EC2
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST_IP }}
-          EC2_USER: ${{ secrets.EC2_SSH_USERNAME }}
-          EC2_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-        run: |
-          # Write the PEM key to a temporary file
-          echo "${EC2_KEY}" > ec2_key.pem
-          chmod 600 ec2_key.pem
-
-          # Pull the freshly‑pushed image on the remote host
-          ssh -i ec2_key.pem -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} \
-            "docker pull ${{ env.DOCKER_IMAGE }}"
-
-          # Restart the container (force‑recreate)
-          ssh -i ec2_key.pem -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} \
-            "docker rm -f ${CONTAINER_NAME} || true && \
-             docker run -d --name ${CONTAINER_NAME} -p ${APP_PORT}:${APP_PORT} ${{ env.DOCKER_IMAGE }}"
-
-          # Clean up the temporary PEM file
-          rm -f ec2_key.pem
+          docker push $DOCKER_IMAGE
