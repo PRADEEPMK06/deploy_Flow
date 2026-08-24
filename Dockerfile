@@ -27,7 +27,7 @@ COPY server.ts .
 COPY src/ ./src
 COPY tsconfig.json .
 # Compile TypeScript – output goes to /api/dist
-RUN npm run build
+RUN npx tsc
 
 # --------------------------------------------------------------
 # 3️⃣ Runtime image – Nginx serves the UI, Node runs the API
