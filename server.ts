@@ -6,7 +6,7 @@ import { exec } from 'child_process';
 import util from 'util';
 import { Client as SshClient } from 'ssh2';
 
-import { loadDeployments, saveDeployments } from './persistence';
+import { saveDeployments, loadDeployments } from "./src/persistence";
 
 // New types for deployment modes
 enum DeploymentMode {
@@ -49,10 +49,8 @@ const PROJECT_PORT_MAX = 9000;
 // In-Memory EC2 SSH Config (if user connects remotely, or executes directly on local host)
 interface SshConnectionOptions {
   host: string;
-  port?: number;
   username: string;
-  privateKey: string;
-  passphrase?: string;
+  status?: string;
 }
 
 let ec2SshConfig = {
