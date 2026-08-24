@@ -16,12 +16,15 @@
     "allowJs": true,
     "jsx": "react-jsx",
     "outDir": "./dist",
-      "paths": {
-        "@/*": [
-          "./*"
-        ]
-      }
+
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
     },
+
     "allowImportingTsExtensions": true,
     "noEmit": false
   }
+}

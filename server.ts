@@ -6,7 +6,7 @@ import { exec } from 'child_process';
 import util from 'util';
 import { Client as SshClient } from 'ssh2';
 
-import { loadDeployments, saveDeployments } from './src/persistence';
+import { loadDeployments, saveDeployments } from './persistence';
 
 // New types for deployment modes
 enum DeploymentMode {
@@ -99,8 +99,7 @@ interface LiveDeploymentRecord {
   sshConfig?: RemoteSshConfig;
 }
 
-// Persistence utilities
-import { loadDeployments, saveDeployments } from './src/persistence';
+const activeDeployments = new Map<string, LiveDeploymentRecord>();
 
 // Load persisted deployments on startup
 loadDeployments().forEach((d) => {

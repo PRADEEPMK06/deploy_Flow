@@ -1,81 +1,37 @@
-# .github/workflows/deploy-flow.yml
 name: DeployFlow CI/CD
 
-# Trigger on pushes to the main branch (adjust if you use a different branch)
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
-  # -------------------------------------------------
-  # 1️⃣ Docker Hub login (pure CLI) – validates secrets
-  # -------------------------------------------------
-  docker-login:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    outputs:
-      login-ok: ${{ steps.verify.outputs.success }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
-      # -------------------------------------------------
-      # Debug: make sure the updated secret names are present (values stay masked)
-      # -------------------------------------------------
-      - name: Verify Docker Hub secrets (masked)
-        env:
-          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}   # latest secret name
-          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}         # latest secret name
-        run: |
-          echo "Docker Hub username length: ${#DOCKER_HUB_USERNAME}"
-          echo "Docker Hub token length: ${#DOCKER_HUB_TOKEN}"
-
-      # -------------------------------------------------
-      # Docker Hub login – pure Docker CLI (no action wrapper)
-      # -------------------------------------------------
-      - name: Docker login via CLI
-        env:
-          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
-        run: |
-          echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
-
-      # -------------------------------------------------
-      # Verify that login succeeded (config file created)
-      # -------------------------------------------------
-      - name: Verify login succeeded
-        id: verify
-        run: |
-          if [ -f "${HOME}/.docker/config.json" ]; then
-            echo "Docker login succeeded"
-            echo "success=true" >> $GITHUB_OUTPUT
-          else
-            echo "Docker login failed"
-            echo "success=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-  # -------------------------------------------------
-  # 2️⃣ Build the image and push it (depends on docker-login)
-  # -------------------------------------------------
-  build-and-push:
-    needs: docker-login
-    if: ${{ needs.docker-login.outputs.login-ok == 'true' }}
-    runs-on: ubuntu-latest
     env:
-      DOCKER_IMAGE: pradeepmk799/deployflow   # change only the repo name if you rename it
+      DOCKER_IMAGE: pradeepmk17/deployflow:latest
       CONTAINER_NAME: deployflow-app
-      APP_PORT: 8000
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Each job gets a fresh runner, so we must log in again before we can push
-      - name: Docker login again (CLI)
+      - name: Verify Docker Hub secrets
         env:
           DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
           DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
         run: |
-          echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
+          echo "Username length: ${#DOCKER_HUB_USERNAME}"
+          echo "Token length: ${#DOCKER_HUB_TOKEN}"
+
+      - name: Docker login
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          echo "$DOCKER_HUB_TOKEN" | docker login \
+            -u "$DOCKER_HUB_USERNAME" \
+            --password-stdin
 
       - name: Build Docker image
         run: |
@@ -85,29 +41,26 @@ jobs:
         run: |
           docker push $DOCKER_IMAGE
 
-      # -------------------------------------------------
-      # (Optional) Deploy the image on the EC2 host – uses EC2 secrets
-      # -------------------------------------------------
-      - name: Deploy to EC2 (self‑mode)
-        if: always()   # runs even if the previous step fails; remove if you only want on success
+      - name: Deploy to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST_IP }}
           EC2_USER: ${{ secrets.EC2_SSH_USERNAME }}
           EC2_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          IMAGE: ${{ env.DOCKER_IMAGE }}
-          CONTAINER: ${{ env.CONTAINER_NAME }}
-          PORT: ${{ env.APP_PORT }}
         run: |
-          # Write the PEM key to a temporary file with strict permissions
-          echo "${EC2_KEY}" > ec2_key.pem
+          echo "$EC2_KEY" > ec2_key.pem
           chmod 600 ec2_key.pem
 
-          # Pull the newly‑pushed image on the remote host
-          ssh -i ec2_key.pem -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} "docker pull ${IMAGE}"
+          ssh -i ec2_key.pem -o StrictHostKeyChecking=no \
+            ${EC2_USER}@${EC2_HOST} \
+            "docker pull $DOCKER_IMAGE"
 
-          # Stop any previous container and run the new one
-          ssh -i ec2_key.pem -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} \
-            "docker rm -f ${CONTAINER} || true && docker run -d --name ${CONTAINER} -p ${PORT}:${PORT} ${IMAGE}"
+          ssh -i ec2_key.pem -o StrictHostKeyChecking=no \
+            ${EC2_USER}@${EC2_HOST} \
+            "docker rm -f ${CONTAINER_NAME} || true
+             docker run -d \
+               --name ${CONTAINER_NAME} \
+               -p 80:80 \
+               -p 8000:8000 \
+               ${DOCKER_IMAGE}"
 
-          # Clean up the temporary key file
           rm -f ec2_key.pem

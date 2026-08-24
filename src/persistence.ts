@@ -1,11 +1,8 @@
-// src/persistence.ts
-export function saveData(key: string, value: any): void {
-  // TODO: implement actual persistence (e.g., write to file, DB, etc.)
-  console.log(`Saving ${key}`, value);
+export function saveDeployments(data: any): void {
+  console.log("Saving deployments", data);
 }
 
-export function loadData<T>(key: string): T | undefined {
-  // TODO: implement actual load logic
-  console.log(`Loading ${key}`);
+export function loadDeployments<T>(): T | undefined {
+  console.log("Loading deployments");
   return undefined;
 }
